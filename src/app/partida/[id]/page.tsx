@@ -9,6 +9,7 @@ import GameStatus from "@/components/GameStatus";
 import { checkGameEnd } from "@/domain/checkGameEnd";
 import { isMovePossible } from "@/domain/isMovePossible";
 import ActionButton from "@/components/ActionButton";
+import ErrorPanel from "@/components/ErrorPanel";
 
 interface Player {
   nome: string;
@@ -204,7 +205,7 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
           {loading ? "Entrando..." : "Entrar"}
         </button>
       </form>
-      {error && <p className="text-red-400 mt-2">{error}</p>}
+      <ErrorPanel>{error}</ErrorPanel>
       {partida && isAdmin ? (
         <AdminPanel partida={partida} onUpdate={setPartida} />
       ) : (
