@@ -128,11 +128,21 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
       setError(`Você deve jogar pelo menos ${minPlays} carta${minPlays > 1 ? 's' : ''} neste turno.`);
       return;
     }
+    // Compra de cartas
+    let newBaralho = [...partida.baralho];
+    const newPlayers = [...partida.jogadores];
+    const playerIdx = newPlayers.findIndex((p) => p.nome === name);
+    while (newBaralho.length > 0 && newPlayers[playerIdx].cartas.length < 6) {
+      newPlayers[playerIdx].cartas.push(newBaralho[0]);
+      newBaralho = newBaralho.slice(1);
+    }
     // Avançar para o próximo jogador
     const next = nextPlayer(partida.ordemJogadores, name);
     const updated = {
       ...partida,
       jogadorAtual: next,
+      jogadores: newPlayers,
+      baralho: newBaralho,
     };
     setPartida(updated);
     setPlayedThisTurn([]);
