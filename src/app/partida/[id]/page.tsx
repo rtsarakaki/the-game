@@ -10,6 +10,7 @@ import { checkGameEnd } from "@/domain/checkGameEnd";
 import { isMovePossible } from "@/domain/isMovePossible";
 import ActionButton from "@/components/ActionButton";
 import ErrorPanel from "@/components/ErrorPanel";
+import StatsPanel from "@/components/StatsPanel";
 
 interface Player {
   nome: string;
@@ -250,6 +251,12 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
                 98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + p.cartas.length, 0)),
               rounds: partida.ordemJogadores.length,
             }}
+          />
+          <StatsPanel
+            totalCardsPlayed={98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + p.cartas.length, 0))}
+            cardsLeft={partida.baralho.length}
+            playersLeft={partida.jogadores.filter(p => p.cartas.length > 0).length}
+            rounds={partida.ordemJogadores.length}
           />
           <ActionButton
             color="primary"
