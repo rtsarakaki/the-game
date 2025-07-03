@@ -96,8 +96,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
           partida.baralho,
           iPlayers,
           partida.pilhas,
-          isMovePossible,
-          player.nome
+          isMovePossible
         );
         if (status === 'defeat') {
           const updated = { ...partida, status };
@@ -225,8 +224,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
       partida.baralho,
       iPlayers,
       updatedPiles,
-      isMovePossible,
-      player.nome
+      isMovePossible
     );
     // Atualiza backend
     const updated = {
