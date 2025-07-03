@@ -8,6 +8,7 @@ import PlayerList from "@/components/PlayerList";
 import GameStatus from "@/components/GameStatus";
 import { checkGameEnd } from "@/domain/checkGameEnd";
 import { isMovePossible } from "@/domain/isMovePossible";
+import ActionButton from "@/components/ActionButton";
 
 interface Player {
   nome: string;
@@ -228,25 +229,51 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
             isCurrentPlayer={isCurrentPlayer}
           />
           {isCurrentPlayer && (
-            <button
-              className="mt-6 px-6 py-2 bg-purple-600 text-white rounded shadow hover:bg-purple-700 transition disabled:opacity-50"
+            <ActionButton
+              color="secondary"
+              className="mt-6"
               onClick={handleEndTurn}
               disabled={playedThisTurn.length < (partida.baralho.length === 0 ? 1 : 2)}
             >
               Encerrar turno
-            </button>
+            </ActionButton>
           )}
         </>
       )}
       {partida && ["vitoria", "derrota"].includes(partida.status) && (
-        <GameStatus
-          status={partida.status}
-          stats={{
-            totalCardsPlayed:
-              98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + p.cartas.length, 0)),
-            rounds: partida.ordemJogadores.length,
-          }}
-        />
+        <>
+          <GameStatus
+            status={partida.status}
+            stats={{
+              totalCardsPlayed:
+                98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + p.cartas.length, 0)),
+              rounds: partida.ordemJogadores.length,
+            }}
+          />
+          <ActionButton
+            color="primary"
+            className="mt-6"
+            onClick={async () => {
+              // Reset partida
+              const res = await fetch(`/api/partida`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: partida.id,
+                  jogadores: [],
+                  pilhas: { asc1: [1], asc2: [1], desc1: [100], desc2: [100] },
+                  baralho: Array.from({ length: 98 }, (_, i) => i + 2),
+                  ordemJogadores: [],
+                  jogadorAtual: "",
+                  status: "esperando_jogadores",
+                }),
+              });
+              if (res.ok) window.location.reload();
+            }}
+          >
+            Iniciar nova partida
+          </ActionButton>
+        </>
       )}
     </main>
   );
