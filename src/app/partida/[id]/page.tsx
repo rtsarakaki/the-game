@@ -5,6 +5,9 @@ import GameBoard from "@/components/GameBoard";
 import { Piles } from "@/domain/types";
 import { nextPlayer } from "@/domain/nextPlayer";
 import PlayerList from "@/components/PlayerList";
+import GameStatus from "@/components/GameStatus";
+import { checkGameEnd } from "@/domain/checkGameEnd";
+import { isMovePossible } from "@/domain/isMovePossible";
 
 interface Player {
   nome: string;
@@ -108,10 +111,19 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
       ...partida.pilhas,
       [pileKey]: [...partida.pilhas[pileKey], card],
     };
+    // Checa fim de jogo
+    const iPlayers = updatedPlayers.map(p => ({ name: p.nome, cards: p.cartas }));
+    const status = checkGameEnd(
+      partida.baralho,
+      iPlayers,
+      updatedPiles,
+      isMovePossible
+    );
     const updated = {
       ...partida,
       jogadores: updatedPlayers,
       pilhas: updatedPiles,
+      status,
     };
     setPartida(updated);
     setPlayedThisTurn((prev) => [...prev, card]);
@@ -137,6 +149,14 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
       newPlayers[playerIdx].cartas.push(newBaralho[0]);
       newBaralho = newBaralho.slice(1);
     }
+    // Checa fim de jogo
+    const iPlayers2 = newPlayers.map(p => ({ name: p.nome, cards: p.cartas }));
+    const status2 = checkGameEnd(
+      newBaralho,
+      iPlayers2,
+      partida.pilhas,
+      isMovePossible
+    );
     // Avançar para o próximo jogador
     const next = nextPlayer(partida.ordemJogadores, name);
     const updated = {
@@ -144,6 +164,7 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
       jogadorAtual: next,
       jogadores: newPlayers,
       baralho: newBaralho,
+      status: status2,
     };
     setPartida(updated);
     setPlayedThisTurn([]);
@@ -216,6 +237,16 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
             </button>
           )}
         </>
+      )}
+      {partida && ["vitoria", "derrota"].includes(partida.status) && (
+        <GameStatus
+          status={partida.status}
+          stats={{
+            totalCardsPlayed:
+              98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + p.cartas.length, 0)),
+            rounds: partida.ordemJogadores.length,
+          }}
+        />
       )}
     </main>
   );
