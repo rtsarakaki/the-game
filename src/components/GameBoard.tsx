@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Piles, IPlayer } from "@/domain/types";
 import { isValidMove, PileType } from "@/domain/isValidMove";
+import Pile from "./Pile";
+import Card from "./Card";
 
 interface GameBoardProps {
   piles: Piles;
@@ -52,33 +54,26 @@ export default function GameBoard({ piles, player, onPlay, isCurrentPlayer }: Ga
     <div className="flex flex-col items-center gap-8 w-full max-w-2xl mx-auto">
       <div className="grid grid-cols-2 gap-6 w-full">
         {Object.entries(piles).map(([key, pile]) => (
-          <button
+          <Pile
             key={key}
-            className={`flex flex-col items-center justify-center p-4 rounded-lg shadow-lg border-2 transition-all
-              ${key.startsWith("asc") ? "border-blue-400 bg-blue-100" : "border-red-400 bg-red-100"}
-              ${selectedPile === key ? "ring-4 ring-yellow-400" : ""}
-            `}
+            label={pileLabels[key as keyof Piles]}
+            topCard={pile[pile.length - 1]}
+            type={pileTypes[key as keyof Piles]}
+            selected={selectedPile === key}
             onClick={() => handlePileClick(key as keyof Piles)}
             disabled={!isCurrentPlayer || selectedCard === null}
-          >
-            <span className="font-bold text-lg mb-2">{pileLabels[key as keyof Piles]}</span>
-            <span className="text-2xl font-mono">{pile[pile.length - 1]}</span>
-          </button>
+          />
         ))}
       </div>
       <div className="flex flex-wrap gap-3 justify-center mt-8">
         {player.cards.map((card) => (
-          <button
+          <Card
             key={card}
-            className={`w-14 h-20 flex items-center justify-center rounded-lg shadow-lg text-xl font-bold border-2 transition-all
-              ${selectedCard === card ? "border-yellow-400 ring-4 ring-yellow-300" : "border-gray-300"}
-              ${isCurrentPlayer ? "bg-white hover:bg-yellow-100 cursor-pointer" : "bg-gray-200 cursor-not-allowed"}
-            `}
+            value={card}
+            selected={selectedCard === card}
             onClick={() => handleCardClick(card)}
             disabled={!isCurrentPlayer}
-          >
-            {card}
-          </button>
+          />
         ))}
       </div>
       {error && <p className="text-red-500 mt-4">{error}</p>}
