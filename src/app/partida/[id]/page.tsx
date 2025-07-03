@@ -4,6 +4,7 @@ import AdminPanel from "./AdminPanel";
 import GameBoard from "@/components/GameBoard";
 import { Piles } from "@/domain/types";
 import { nextPlayer } from "@/domain/nextPlayer";
+import PlayerList from "@/components/PlayerList";
 
 interface Player {
   nome: string;
@@ -187,11 +188,7 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
       ) : (
         <div className="mt-8 bg-white/90 rounded p-4 shadow w-full max-w-xs">
           <h2 className="text-lg font-semibold mb-2 text-gray-800">Jogadores</h2>
-          <ul className="space-y-1">
-            {partida?.jogadores.map((p) => (
-              <li key={p.nome} className="text-gray-700">{p.nome}</li>
-            ))}
-          </ul>
+          <PlayerList players={partida?.jogadores.map((p) => p.nome) ?? []} currentPlayer={partida?.jogadorAtual} />
           <p className="mt-2 text-sm text-gray-500">
             {partida && partida.jogadores.length < 2
               ? "Aguardando mais jogadores... (mínimo 2)"
