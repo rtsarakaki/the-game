@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import AdminPanel from "./AdminPanel";
 
 interface Player {
   nome: string;
@@ -9,23 +10,32 @@ interface Player {
 interface GameData {
   id: string;
   jogadores: Player[];
+  pilhas: {
+    asc1: number[];
+    asc2: number[];
+    desc1: number[];
+    desc2: number[];
+  };
+  baralho: number[];
+  ordemJogadores: string[];
+  jogadorAtual: string;
   status: string;
 }
 
 export default function JoinGamePage({ params }: { params: { id: string } }) {
   const [name, setName] = useState("");
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [partida, setPartida] = useState<GameData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Polling for player list
+  // Polling for partida
   useEffect(() => {
     const fetchGame = async () => {
       try {
         const res = await fetch(`/api/partida`);
         const data: GameData = await res.json();
         if (data.id !== params.id) return;
-        setPlayers(data.jogadores);
+        setPartida(data);
       } catch {}
     };
     fetchGame();
@@ -65,7 +75,7 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
         body: JSON.stringify(updated),
       });
       if (!putRes.ok) throw new Error();
-      setPlayers(updated.jogadores);
+      setPartida(updated);
       setName("");
     } catch {
       setError("Erro ao entrar na partida.");
@@ -73,6 +83,8 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
       setLoading(false);
     }
   };
+
+  const isAdmin = !!(partida && partida.jogadores && partida.jogadores.length > 0 && partida.jogadores[0].nome === name);
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
@@ -87,32 +99,36 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
           required
           minLength={2}
           maxLength={16}
-          disabled={loading || players.length >= 6}
+          disabled={!!(loading || (partida && partida.jogadores.length >= 6))}
         />
         <button
           type="submit"
           className="px-6 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700 transition disabled:opacity-50"
-          disabled={loading || players.length >= 6 || !name.trim()}
+          disabled={!!(loading || (partida && partida.jogadores.length >= 6) || !name.trim())}
         >
           {loading ? "Entrando..." : "Entrar"}
         </button>
       </form>
       {error && <p className="text-red-400 mt-2">{error}</p>}
-      <div className="mt-8 bg-white/90 rounded p-4 shadow w-full max-w-xs">
-        <h2 className="text-lg font-semibold mb-2 text-gray-800">Jogadores</h2>
-        <ul className="space-y-1">
-          {players.map((p) => (
-            <li key={p.nome} className="text-gray-700">{p.nome}</li>
-          ))}
-        </ul>
-        <p className="mt-2 text-sm text-gray-500">
-          {players.length < 2
-            ? "Aguardando mais jogadores... (mínimo 2)"
-            : players.length === 6
-            ? "Máximo de jogadores atingido. Aguarde o início."
-            : "Aguardando início da partida..."}
-        </p>
-      </div>
+      {partida && isAdmin ? (
+        <AdminPanel partida={partida} onUpdate={setPartida} />
+      ) : (
+        <div className="mt-8 bg-white/90 rounded p-4 shadow w-full max-w-xs">
+          <h2 className="text-lg font-semibold mb-2 text-gray-800">Jogadores</h2>
+          <ul className="space-y-1">
+            {partida?.jogadores.map((p) => (
+              <li key={p.nome} className="text-gray-700">{p.nome}</li>
+            ))}
+          </ul>
+          <p className="mt-2 text-sm text-gray-500">
+            {partida && partida.jogadores.length < 2
+              ? "Aguardando mais jogadores... (mínimo 2)"
+              : partida && partida.jogadores.length === 6
+              ? "Máximo de jogadores atingido. Aguarde o início."
+              : "Aguardando início da partida..."}
+          </p>
+        </div>
+      )}
     </main>
   );
 } 
