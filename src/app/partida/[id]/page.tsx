@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import AdminPanel from "./AdminPanel";
+import GameBoard from "@/components/GameBoard";
+import { Piles } from "@/domain/types";
 
 interface Player {
   nome: string;
@@ -86,6 +88,36 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
 
   const isAdmin = !!(partida && partida.jogadores && partida.jogadores.length > 0 && partida.jogadores[0].nome === name);
 
+  // Helper: retorna o jogador atual
+  const currentPlayer = partida?.jogadorAtual;
+  const isCurrentPlayer = currentPlayer === name;
+  const playerObj = partida?.jogadores.find((p) => p.nome === name);
+
+  // Lógica de jogar carta
+  const handlePlay = async (card: number, pileKey: keyof Piles) => {
+    if (!partida || !playerObj) return;
+    // Remove carta do jogador
+    const updatedPlayers = partida.jogadores.map((p) =>
+      p.nome === name ? { ...p, cartas: p.cartas.filter((c) => c !== card) } : p
+    );
+    // Atualiza pilha
+    const updatedPiles = {
+      ...partida.pilhas,
+      [pileKey]: [...partida.pilhas[pileKey], card],
+    };
+    const updated = {
+      ...partida,
+      jogadores: updatedPlayers,
+      pilhas: updatedPiles,
+    };
+    setPartida(updated);
+    await fetch(`/api/partida`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updated),
+    });
+  };
+
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
       <h1 className="text-2xl font-bold text-white mb-6">Entrar na Partida</h1>
@@ -128,6 +160,14 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
               : "Aguardando início da partida..."}
           </p>
         </div>
+      )}
+      {partida && partida.status === "em_andamento" && playerObj && (
+        <GameBoard
+          piles={partida.pilhas}
+          player={{ name: playerObj.nome, cards: playerObj.cartas }}
+          onPlay={handlePlay}
+          isCurrentPlayer={isCurrentPlayer}
+        />
       )}
     </main>
   );
