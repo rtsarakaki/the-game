@@ -121,8 +121,7 @@ export default function JoinGamePage({ params }: { params: Promise<{ id: string 
       partida.baralho,
       iPlayers,
       updatedPiles,
-      isMovePossible,
-      partida.jogadorAtual
+      isMovePossible
     );
     const updated = {
       ...partida,
@@ -166,8 +165,7 @@ export default function JoinGamePage({ params }: { params: Promise<{ id: string 
       newBaralho,
       iPlayers2,
       partida.pilhas,
-      isMovePossible,
-      partida.jogadorAtual
+      isMovePossible
     );
     // Avançar para o próximo jogador
     const next = nextPlayer(partida.ordemJogadores, name);
