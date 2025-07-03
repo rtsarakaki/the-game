@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import AdminPanel from "./AdminPanel";
 import GameBoard from "@/components/GameBoard";
 import { Piles } from "@/domain/types";
+import { nextPlayer } from "@/domain/nextPlayer";
 
 interface Player {
   nome: string;
@@ -29,6 +30,7 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
   const [partida, setPartida] = useState<GameData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [playedThisTurn, setPlayedThisTurn] = useState<number[]>([]);
 
   // Polling for partida
   useEffect(() => {
@@ -111,12 +113,40 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
       pilhas: updatedPiles,
     };
     setPartida(updated);
+    setPlayedThisTurn((prev) => [...prev, card]);
     await fetch(`/api/partida`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updated),
     });
   };
+
+  const handleEndTurn = async () => {
+    if (!partida || !playerObj) return;
+    const minPlays = partida.baralho.length === 0 ? 1 : 2;
+    if (playedThisTurn.length < minPlays) {
+      setError(`Você deve jogar pelo menos ${minPlays} carta${minPlays > 1 ? 's' : ''} neste turno.`);
+      return;
+    }
+    // Avançar para o próximo jogador
+    const next = nextPlayer(partida.ordemJogadores, name);
+    const updated = {
+      ...partida,
+      jogadorAtual: next,
+    };
+    setPartida(updated);
+    setPlayedThisTurn([]);
+    await fetch(`/api/partida`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updated),
+    });
+  };
+
+  // Reset playedThisTurn quando mudar de jogador
+  useEffect(() => {
+    setPlayedThisTurn([]);
+  }, [partida?.jogadorAtual]);
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
@@ -162,12 +192,23 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
         </div>
       )}
       {partida && partida.status === "em_andamento" && playerObj && (
-        <GameBoard
-          piles={partida.pilhas}
-          player={{ name: playerObj.nome, cards: playerObj.cartas }}
-          onPlay={handlePlay}
-          isCurrentPlayer={isCurrentPlayer}
-        />
+        <>
+          <GameBoard
+            piles={partida.pilhas}
+            player={{ name: playerObj.nome, cards: playerObj.cartas }}
+            onPlay={handlePlay}
+            isCurrentPlayer={isCurrentPlayer}
+          />
+          {isCurrentPlayer && (
+            <button
+              className="mt-6 px-6 py-2 bg-purple-600 text-white rounded shadow hover:bg-purple-700 transition disabled:opacity-50"
+              onClick={handleEndTurn}
+              disabled={playedThisTurn.length < (partida.baralho.length === 0 ? 1 : 2)}
+            >
+              Encerrar turno
+            </button>
+          )}
+        </>
       )}
     </main>
   );
