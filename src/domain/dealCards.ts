@@ -17,11 +17,15 @@ export const dealCards = (
   playerNames: string[],
   cardsPerPlayer: number
 ): DealCardsResult => {
-  let deckCopy = [...deck];
-  const players: IPlayer[] = playerNames.map((name) => {
-    const cards = deckCopy.slice(0, cardsPerPlayer);
-    deckCopy = deckCopy.slice(cardsPerPlayer);
-    return { name, cards };
-  });
-  return { deck: deckCopy, players };
+  const { players, deckLeft } = playerNames.reduce(
+    (acc, name) => {
+      const cards = acc.deckLeft.slice(0, cardsPerPlayer);
+      return {
+        players: [...acc.players, { name, cards }],
+        deckLeft: acc.deckLeft.slice(cardsPerPlayer),
+      };
+    },
+    { players: [] as IPlayer[], deckLeft: [...deck] }
+  );
+  return { deck: deckLeft, players };
 }; 

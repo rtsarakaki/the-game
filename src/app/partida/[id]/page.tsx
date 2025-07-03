@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import AdminPanel from "./AdminPanel";
 import GameBoard from "@/components/GameBoard";
 import { Piles } from "@/domain/types";
@@ -32,7 +32,8 @@ interface GameData {
   status: string;
 }
 
-export default function JoinGamePage({ params }: { params: { id: string } }) {
+export default function JoinGamePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [name, setName] = useState("");
   const [partida, setPartida] = useState<GameData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,14 +46,14 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
       try {
         const res = await fetch(`/api/partida`);
         const data: GameData = await res.json();
-        if (data.id !== params.id) return;
+        if (data.id !== id) return;
         setPartida(data);
       } catch {}
     };
     fetchGame();
     const interval = setInterval(fetchGame, 1500);
     return () => clearInterval(interval);
-  }, [params.id]);
+  }, [id]);
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +62,7 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
     try {
       const res = await fetch(`/api/partida`);
       const data: GameData = await res.json();
-      if (data.id !== params.id) {
+      if (data.id !== id) {
         setError("Partida não encontrada.");
         setLoading(false);
         return;
@@ -120,7 +121,8 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
       partida.baralho,
       iPlayers,
       updatedPiles,
-      isMovePossible
+      isMovePossible,
+      partida.jogadorAtual
     );
     const updated = {
       ...partida,
@@ -145,20 +147,27 @@ export default function JoinGamePage({ params }: { params: { id: string } }) {
       return;
     }
     // Compra de cartas
-    let newBaralho = [...partida.baralho];
-    const newPlayers = [...partida.jogadores];
-    const playerIdx = newPlayers.findIndex((p) => p.nome === name);
-    while (newBaralho.length > 0 && newPlayers[playerIdx].cartas.length < 6) {
-      newPlayers[playerIdx].cartas.push(newBaralho[0]);
-      newBaralho = newBaralho.slice(1);
-    }
+    const { newBaralho, newPlayers } = (() => {
+      let baralho = [...partida.baralho];
+      const players = [...partida.jogadores];
+      const playerIdx = players.findIndex((p) => p.nome === name);
+      while (baralho.length > 0 && players[playerIdx].cartas.length < 6) {
+        players[playerIdx] = {
+          ...players[playerIdx],
+          cartas: [...players[playerIdx].cartas, baralho[0]],
+        };
+        baralho = baralho.slice(1);
+      }
+      return { newBaralho: baralho, newPlayers: players };
+    })();
     // Checa fim de jogo
     const iPlayers2 = newPlayers.map(p => ({ name: p.nome, cards: p.cartas }));
     const status2 = checkGameEnd(
       newBaralho,
       iPlayers2,
       partida.pilhas,
-      isMovePossible
+      isMovePossible,
+      partida.jogadorAtual
     );
     // Avançar para o próximo jogador
     const next = nextPlayer(partida.ordemJogadores, name);

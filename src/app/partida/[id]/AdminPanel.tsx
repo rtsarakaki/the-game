@@ -59,6 +59,8 @@ export default function AdminPanel({ partida, onUpdate }: { partida: GameData; o
     }
   };
 
+  const allNamesFilled = partida.jogadores.length >= 2 && partida.jogadores.every(j => j.nome && j.nome.trim().length > 0);
+
   return (
     <div className="bg-white/90 rounded p-4 shadow w-full max-w-xs mt-8">
       <h2 className="text-lg font-semibold mb-2 text-gray-800">Jogadores</h2>
@@ -70,7 +72,7 @@ export default function AdminPanel({ partida, onUpdate }: { partida: GameData; o
       <button
         className="px-6 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 transition disabled:opacity-50 w-full"
         onClick={handleStartGame}
-        disabled={loading || partida.jogadores.length < 2 || partida.status !== "esperando_jogadores"}
+        disabled={loading || !allNamesFilled || partida.status !== "esperando_jogadores"}
       >
         {loading ? "Iniciando..." : "Iniciar partida"}
       </button>

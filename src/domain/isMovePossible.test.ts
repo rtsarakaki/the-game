@@ -15,7 +15,8 @@ describe('isMovePossible', () => {
   });
 
   it('should return false if no moves are possible', () => {
-    const player: IPlayer = { name: 'A', cards: [49, 59, 11, 21] };
+    // Nenhuma carta pode ser jogada em nenhuma pilha
+    const player: IPlayer = { name: 'A', cards: [39, 49, 21, 31] };
     expect(isMovePossible(player, basePiles)).toBe(false);
   });
 
