@@ -2,11 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
 
-const PARTIDA_PATH = path.resolve(process.cwd(), 'src/data/partida.json');
+const isVercel = !!process.env.VERCEL;
+const PARTIDA_PATH = isVercel
+  ? '/tmp/partida.json'
+  : path.resolve(process.cwd(), 'src/data/partida.json');
 
 export async function GET() {
   try {
-    const data = await fs.readFile(PARTIDA_PATH, 'utf-8');
+    let data;
+    try {
+      data = await fs.readFile(PARTIDA_PATH, 'utf-8');
+    } catch {
+      // Se não existe, inicializa vazio
+      await fs.writeFile(PARTIDA_PATH, JSON.stringify({}, null, 2));
+      data = '{}';
+    }
     return NextResponse.json(JSON.parse(data));
   } catch {
     return NextResponse.json({ error: 'Could not read partida.json' }, { status: 500 });
