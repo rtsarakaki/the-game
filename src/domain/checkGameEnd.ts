@@ -1,16 +1,6 @@
+import { IPlayer, Piles } from './types';
+
 export type GameStatus = 'victory' | 'defeat' | 'in_progress';
-
-export interface IPlayer {
-  name: string;
-  cards: number[];
-}
-
-export interface Piles {
-  asc1: number[];
-  asc2: number[];
-  desc1: number[];
-  desc2: number[];
-}
 
 export const checkGameEnd = (
   deck: number[],

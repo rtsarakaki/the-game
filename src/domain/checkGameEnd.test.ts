@@ -1,4 +1,5 @@
-import { checkGameEnd, GameStatus, IPlayer, Piles } from './checkGameEnd';
+import { checkGameEnd } from './checkGameEnd';
+import { IPlayer, Piles } from './types';
 
 describe('checkGameEnd', () => {
   const piles: Piles = {

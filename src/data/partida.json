@@ -1,0 +1,14 @@
+{
+  "id": "",
+  "jogadores": [],
+  "pilhas": {
+    "asc1": [1],
+    "asc2": [1],
+    "desc1": [100],
+    "desc2": [100]
+  },
+  "baralho": [],
+  "ordemJogadores": [],
+  "jogadorAtual": "",
+  "status": "esperando_jogadores"
+}

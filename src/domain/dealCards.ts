@@ -1,7 +1,4 @@
-export interface IPlayer {
-  name: string;
-  cards: number[];
-}
+import { IPlayer } from './types';
 
 export interface DealCardsResult {
   deck: number[];

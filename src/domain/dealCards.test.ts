@@ -1,4 +1,5 @@
 import { dealCards } from './dealCards';
+import { IPlayer } from './types';
 
 describe('dealCards', () => {
   it('should distribute the correct number of cards to each player', () => {
