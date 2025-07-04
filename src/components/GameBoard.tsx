@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Piles, IPlayer } from "@/domain/types";
 import { isValidMove, PileType } from "@/domain/isValidMove";
 import Pile from "./Pile";
@@ -29,11 +29,27 @@ export default function GameBoard({ piles, player, onPlay, isCurrentPlayer }: Ga
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
   const [selectedPile, setSelectedPile] = useState<keyof Piles | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dragOverPile, setDragOverPile] = useState<keyof Piles | null>(null);
+  const errorAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const playError = () => {
+    if (!errorAudioRef.current) {
+      errorAudioRef.current = new window.Audio('/sounds/error.mp3');
+    }
+    errorAudioRef.current.currentTime = 0;
+    errorAudioRef.current.play();
+  };
 
   const handleCardClick = (card: number) => {
     if (!isCurrentPlayer) return;
     setSelectedCard(card);
     setError(null);
+  };
+
+  const handleCardDragStart = (event: React.DragEvent, card: number) => {
+    if (!isCurrentPlayer) return;
+    event.dataTransfer.setData('text/plain', card.toString());
+    setSelectedCard(card);
   };
 
   const handlePileClick = (pileKey: keyof Piles) => {
@@ -42,6 +58,7 @@ export default function GameBoard({ piles, player, onPlay, isCurrentPlayer }: Ga
     const topCard = piles[pileKey][piles[pileKey].length - 1];
     if (!isValidMove(pileType, topCard, selectedCard)) {
       setError("Jogada inválida para esta pilha.");
+      playError();
       return;
     }
     onPlay(selectedCard, pileKey);
@@ -50,30 +67,73 @@ export default function GameBoard({ piles, player, onPlay, isCurrentPlayer }: Ga
     setError(null);
   };
 
+  const handlePileDrop = (event: React.DragEvent, pileKey: keyof Piles) => {
+    event.preventDefault();
+    setDragOverPile(null);
+    if (!isCurrentPlayer) return;
+    const card = parseInt(event.dataTransfer.getData('text/plain'), 10);
+    const pileType = pileTypes[pileKey];
+    const topCard = piles[pileKey][piles[pileKey].length - 1];
+    if (!isValidMove(pileType, topCard, card)) {
+      setError("Jogada inválida para esta pilha.");
+      playError();
+      return;
+    }
+    onPlay(card, pileKey);
+    setSelectedCard(null);
+    setSelectedPile(null);
+    setError(null);
+  };
+
+  const handlePileDragOver = (event: React.DragEvent, pileKey: keyof Piles) => {
+    event.preventDefault();
+    setDragOverPile(pileKey);
+  };
+
+  const handlePileDragLeave = (event: React.DragEvent, pileKey: keyof Piles) => {
+    event.preventDefault();
+    setDragOverPile(prev => (prev === pileKey ? null : prev));
+  };
+
   return (
     <div className="flex flex-col items-center gap-8 w-full max-w-2xl mx-auto">
       <div className="grid grid-cols-2 gap-6 w-full">
-        {Object.entries(piles).map(([key, pile]) => (
-          <Pile
-            key={key}
-            label={pileLabels[key as keyof Piles]}
-            topCard={pile[pile.length - 1]}
-            type={pileTypes[key as keyof Piles]}
-            selected={selectedPile === key}
-            onClick={() => handlePileClick(key as keyof Piles)}
-            disabled={!isCurrentPlayer || selectedCard === null}
-          />
-        ))}
+        {Object.entries(piles).map(([key, pile]) => {
+          const pileKey = key as keyof Piles;
+          return (
+            <div
+              key={key}
+              onDrop={event => handlePileDrop(event, pileKey)}
+              onDragOver={event => handlePileDragOver(event, pileKey)}
+              onDragLeave={event => handlePileDragLeave(event, pileKey)}
+              className={`w-full h-full transition-all ${dragOverPile === pileKey ? 'ring-4 ring-red-500' : ''}`}
+            >
+              <Pile
+                label={pileLabels[pileKey]}
+                topCard={pile[pile.length - 1]}
+                type={pileTypes[pileKey]}
+                selected={selectedPile === pileKey}
+                onClick={() => handlePileClick(pileKey)}
+                disabled={!isCurrentPlayer || selectedCard === null}
+              />
+            </div>
+          );
+        })}
       </div>
       <div className="flex flex-wrap gap-3 justify-center mt-8">
         {player.cards.map((card) => (
-          <Card
+          <div
             key={card}
-            value={card}
-            selected={selectedCard === card}
-            onClick={() => handleCardClick(card)}
-            disabled={!isCurrentPlayer}
-          />
+            draggable={isCurrentPlayer}
+            onDragStart={event => handleCardDragStart(event, card)}
+          >
+            <Card
+              value={card}
+              selected={selectedCard === card}
+              onClick={() => handleCardClick(card)}
+              disabled={!isCurrentPlayer}
+            />
+          </div>
         ))}
       </div>
       {error && <p className="text-red-500 mt-4">{error}</p>}

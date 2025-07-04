@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 
 interface GameStatusProps {
   status: "em_andamento" | "vitoria" | "derrota" | string;
@@ -9,6 +9,19 @@ interface GameStatusProps {
 }
 
 export default function GameStatus({ status, stats }: GameStatusProps) {
+  const playedSuccess = useRef(false);
+
+  useEffect(() => {
+    if (status === "vitoria" && !playedSuccess.current) {
+      const audio = new Audio("/sounds/success.mp3");
+      audio.play();
+      playedSuccess.current = true;
+    }
+    if (status !== "vitoria") {
+      playedSuccess.current = false;
+    }
+  }, [status]);
+
   if (status === "em_andamento") return null;
   if (status === "vitoria") {
     return (
