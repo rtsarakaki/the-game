@@ -97,43 +97,60 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
   return (
     <main className="flex flex-col items-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
       <h1 className="text-2xl font-bold text-white mb-4">Tabuleiro Principal</h1>
-      <div className="bg-white/90 rounded-lg shadow p-6 w-full max-w-2xl flex flex-col gap-6">
-        <section>
-          <h2 className="text-lg font-semibold mb-2 text-gray-800">Jogadores</h2>
-          <ul className="flex flex-col gap-2">
-            {partida.jogadores.map((j) => (
-              <li
-                key={j.id}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg shadow-sm transition-all
-                  ${partida.jogadorAtual === j.id ? "bg-blue-100 border-l-4 border-blue-500 font-bold text-blue-900 scale-105" : "bg-gray-50 text-gray-700"}
-                `}
-              >
-                <span className={`flex items-center justify-center rounded-full font-bold text-white text-sm w-8 h-8 shadow ${partida.jogadorAtual === j.id ? 'bg-blue-500' : 'bg-gray-400'}`}>
-                  {j.nome.slice(0,2).toUpperCase()}
-                </span>
-                <span className="truncate max-w-[120px]">{j.nome}</span>
-                {partida.jogadorAtual === j.id && <span className="ml-2 text-xs text-blue-600 font-semibold">(Vez)</span>}
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section>
-          <h2 className="text-lg font-semibold mb-2 text-gray-800">Pilhas</h2>
-          <div className="grid grid-cols-2 gap-4">
-            {Object.entries(partida.pilhas).map(([key, pile]) => (
-              <div key={key} className="flex flex-col items-center">
-                <span className="text-xs text-gray-500 mb-1">{key.toUpperCase()}</span>
-                <Card value={pile[pile.length - 1]} selected={false} onClick={() => {}} disabled variant="hand" />
-              </div>
-            ))}
+      <div className="w-full max-w-6xl flex flex-col md:flex-row gap-6 items-start">
+        <aside className="md:w-1/3 w-full mb-4 md:mb-0">
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded shadow text-gray-800">
+            <h2 className="text-lg font-bold mb-2 text-yellow-700">Regras do Jogo</h2>
+            <ul className="list-disc pl-5 text-sm space-y-1">
+              <li>O objetivo é jogar todas as cartas nas pilhas centrais, cooperando com os outros jogadores.</li>
+              <li>Existem 4 pilhas: 2 crescentes (de 1 a 99) e 2 decrescentes (de 100 a 2).</li>
+              <li>Em pilhas crescentes, só pode jogar carta maior que o topo ou exatamente 10 abaixo.</li>
+              <li>Em pilhas decrescentes, só pode jogar carta menor que o topo ou exatamente 10 acima.</li>
+              <li>No seu turno, jogue pelo menos 2 cartas (ou 1 se o baralho acabou).</li>
+              <li>Após jogar, compre cartas até ficar com 6 (se houver no baralho).</li>
+              <li>Se nenhum jogador puder jogar, o jogo termina em derrota.</li>
+              <li>Se todas as cartas forem jogadas, todos vencem!</li>
+            </ul>
           </div>
-        </section>
-        <StatsPanel
-          totalCardsPlayed={98 - (partida.baralho.length + (partida.jogadores.reduce((acc, p) => acc + (p.cartas ? p.cartas.length : 0), 0)))}
-          cardsLeft={partida.baralho.length}
-          playersLeft={partida.jogadores.filter(p => p.cartas && p.cartas.length > 0).length}
-          rounds={partida.ordemJogadores.length}
-        />
+        </aside>
+        <div className="bg-white/90 rounded-lg shadow p-6 w-full md:w-2/3 flex flex-col gap-6">
+          <section>
+            <h2 className="text-lg font-semibold mb-2 text-gray-800">Jogadores</h2>
+            <ul className="flex flex-col gap-2">
+              {partida.jogadores.map((j) => (
+                <li
+                  key={j.id}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg shadow-sm transition-all
+                    ${partida.jogadorAtual === j.id ? "bg-blue-100 border-l-4 border-blue-500 font-bold text-blue-900 scale-105" : "bg-gray-50 text-gray-700"}
+                  `}
+                >
+                  <span className={`flex items-center justify-center rounded-full font-bold text-white text-sm w-8 h-8 shadow ${partida.jogadorAtual === j.id ? 'bg-blue-500' : 'bg-gray-400'}`}>
+                    {j.nome.slice(0,2).toUpperCase()}
+                  </span>
+                  <span className="truncate max-w-[120px]">{j.nome}</span>
+                  {partida.jogadorAtual === j.id && <span className="ml-2 text-xs text-blue-600 font-semibold">(Vez)</span>}
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section>
+            <h2 className="text-lg font-semibold mb-2 text-gray-800">Pilhas</h2>
+            <div className="grid grid-cols-2 gap-4">
+              {Object.entries(partida.pilhas).map(([key, pile]) => (
+                <div key={key} className="flex flex-col items-center">
+                  <span className="text-xs text-gray-500 mb-1">{key.toUpperCase()}</span>
+                  <Card value={pile[pile.length - 1]} selected={false} onClick={() => {}} disabled variant="hand" />
+                </div>
+              ))}
+            </div>
+          </section>
+          <StatsPanel
+            totalCardsPlayed={98 - (partida.baralho.length + (partida.jogadores.reduce((acc, p) => acc + (p.cartas ? p.cartas.length : 0), 0)))}
+            cardsLeft={partida.baralho.length}
+            playersLeft={partida.jogadores.filter(p => p.cartas && p.cartas.length > 0).length}
+            rounds={partida.ordemJogadores.length}
+          />
+        </div>
       </div>
       {/* Painel de vitória/derrota */}
       {['victory','defeat','vitoria','derrota'].includes(partida.status) && (

@@ -72,6 +72,22 @@ the-game/
 - **PUT** `/api/partida`: Atualiza estado da partida (ex: novo jogador, jogada, início).
 - Persistência simples em arquivo `src/data/partida.json` (mock de backend).
 
+## 5.1 Persistência Temporária em Serverless (Vercel)
+
+Em ambientes serverless como a Vercel, não é possível gravar arquivos na estrutura do projeto. Por isso, a API detecta se está rodando na Vercel (`process.env.VERCEL`) e, nesse caso, utiliza o diretório temporário `/tmp` para persistir o arquivo de partida:
+
+```ts
+const isVercel = !!process.env.VERCEL;
+const PARTIDA_PATH = isVercel
+  ? '/tmp/partida.json'
+  : path.resolve(process.cwd(), 'src/data/partida.json');
+```
+
+- **Leitura:** Ao receber um GET, a API tenta ler `/tmp/partida.json`. Se não existir, inicializa vazio.
+- **Escrita:** POST/PUT sobrescrevem o arquivo em `/tmp/partida.json` com o novo estado.
+- **Importante:** O conteúdo de `/tmp` é volátil e só existe enquanto a instância está ativa. Ao reiniciar (timeout/deploy), o arquivo é perdido.
+- **Local:** Fora da Vercel, a persistência continua em `src/data/partida.json` normalmente.
+
 ---
 
 ## 6. WebSocket (socket.io)

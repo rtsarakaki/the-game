@@ -37,12 +37,14 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
   const [nomeError, setNomeError] = useState<string | null>(null);
   const isMyTurn = (partida?.status === "em_andamento" || partida?.status === "in_progress") && partida?.jogadorAtual === pid;
   const [draggedCard, setDraggedCard] = useState<number | null>(null);
+  const [selectedCard, setSelectedCard] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [playedThisTurn, setPlayedThisTurn] = useState<number[]>([]);
   const [endTurnError, setEndTurnError] = useState<string | null>(null);
   const [lastDrop, setLastDrop] = useState<string | null>(null);
   const [errorDrop, setErrorDrop] = useState<string | null>(null);
   const defeatPlayedRef = useRef(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -68,6 +70,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     setPlayedThisTurn([]);
     setEndTurnError(null);
+    setSelectedCard(null);
   }, [partida?.jogadorAtual]);
 
   // Toca som de derrota apenas uma vez por transição
@@ -115,6 +118,12 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
     };
     checkDefeat();
   }, [isMyTurn, partida, player]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsTouchDevice(window.matchMedia('(pointer: coarse)').matches);
+    }
+  }, []);
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
@@ -309,10 +318,19 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
             {player.cartas.map((c, idx) => (
               <span
                 key={c}
-                className={`relative select-none card-baralho inline-block bg-white text-gray-900 rounded-lg border-2 border-gray-300 shadow-lg px-6 py-8 md:px-8 md:py-12 text-2xl md:text-3xl font-extrabold text-center transition-transform duration-150 cursor-${isMyTurn ? "grab" : "not-allowed"} ${draggedCard === c ? "opacity-60 scale-105 border-blue-500" : "hover:scale-105 hover:border-blue-400"} ${idx > 0 ? '-ml-4 md:-ml-8' : ''}`}
-                draggable={isMyTurn}
-                onDragStart={() => setDraggedCard(c)}
-                onDragEnd={() => setDraggedCard(null)}
+                className={`relative select-none card-baralho inline-block bg-white text-gray-900 rounded-lg border-2 border-gray-300 shadow-lg px-6 py-8 md:px-8 md:py-12 text-2xl md:text-3xl font-extrabold text-center transition-transform duration-150 cursor-${isMyTurn ? (isTouchDevice ? "pointer" : "grab") : "not-allowed"} ${draggedCard === c || selectedCard === c ? "opacity-60 scale-105 border-blue-500" : "hover:scale-105 hover:border-blue-400"} ${idx > 0 ? '-ml-4 md:-ml-8' : ''}`}
+                draggable={isMyTurn && !isTouchDevice}
+                onDragStart={() => !isTouchDevice && setDraggedCard(c)}
+                onDragEnd={() => !isTouchDevice && setDraggedCard(null)}
+                onClick={() => {
+                  if (!isMyTurn) return;
+                  if (isTouchDevice) {
+                    setSelectedCard(selectedCard === c ? null : c);
+                  } else {
+                    setSelectedCard(c);
+                  }
+                  setErrorDrop(null);
+                }}
                 style={{ minWidth: 96, minHeight: 140, maxWidth: 96, maxHeight: 140, zIndex: draggedCard === c ? 10 : idx + 1 }}
               >
                 <span className="absolute top-2 left-3 text-base text-gray-500 font-bold">{c}</span>
@@ -330,6 +348,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
                 key={key}
                 className={`flex flex-col items-center ${dropTarget === key ? "border-blue-500 border-2" : "border-transparent"} ${lastDrop === key ? "ring-4 ring-green-400 scale-105 animate-pulse" : ""} ${errorDrop === key ? "border-red-500 ring-2 ring-red-400" : ""}`}
                 onDragOver={e => {
+                  if (isTouchDevice) return;
                   e.preventDefault();
                   if (isMyTurn) setDropTarget(key);
                   if (isMyTurn && draggedCard !== null && !canDropCard(draggedCard, key as keyof Piles)) {
@@ -339,10 +358,12 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
                   }
                 }}
                 onDragLeave={() => {
+                  if (isTouchDevice) return;
                   setDropTarget(null);
                   setErrorDrop(null);
                 }}
                 onDrop={e => {
+                  if (isTouchDevice) return;
                   e.preventDefault();
                   if (isMyTurn && draggedCard !== null) {
                     if (!canDropCard(draggedCard, key as keyof Piles)) {
@@ -353,6 +374,18 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
                     handlePlayCard(draggedCard, key as keyof Piles);
                   }
                   setDropTarget(null);
+                }}
+                onClick={() => {
+                  if (!isMyTurn || !isTouchDevice) return;
+                  if (selectedCard !== null) {
+                    if (!canDropCard(selectedCard, key as keyof Piles)) {
+                      setErrorDrop(key);
+                      setTimeout(() => setErrorDrop(null), 500);
+                      return;
+                    }
+                    handlePlayCard(selectedCard, key as keyof Piles);
+                    setSelectedCard(null);
+                  }
                 }}
               >
                 <span className="text-xs text-gray-500 mb-1">{key.toUpperCase()}</span>
