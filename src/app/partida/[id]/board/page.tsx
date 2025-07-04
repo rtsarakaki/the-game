@@ -2,9 +2,9 @@
 import { use, useEffect, useState } from "react";
 import { shuffleDeck } from "@/domain/shuffleDeck";
 import { dealCards } from "@/domain/dealCards";
-import GameStatus from '@/components/GameStatus';
 import Card from "@/components/Card";
 import StatsPanel from '@/components/StatsPanel';
+import GameEndOverlay from '@/components/GameEndOverlay';
 
 interface Player {
   id: string;
@@ -38,7 +38,7 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
     let mounted = true;
     const fetchPartida = async () => {
       try {
-        const res = await fetch("/api/partida");
+        const res = await fetch(`/api/partida?_=${Date.now()}`);
         const data = await res.json();
         if (data.id === id && mounted) {
           setPartida(data);
@@ -152,17 +152,13 @@ export default function BoardPage({ params }: { params: Promise<{ id: string }> 
           />
         </div>
       </div>
-      {/* Painel de vitória/derrota */}
-      {['victory','defeat','vitoria','derrota'].includes(partida.status) && (
-        <GameStatus
-          status={partida.status}
-          stats={{
-            totalCardsPlayed:
-              98 - (partida.baralho.length + (partida.jogadores.reduce((acc, p) => acc + (p.cartas ? p.cartas.length : 0), 0))),
-            rounds: partida.ordemJogadores.length,
-          }}
-        />
-      )}
+      <GameEndOverlay
+        status={partida.status}
+        stats={{
+          totalCardsPlayed: 98 - (partida.baralho.length + (partida.jogadores.reduce((acc, p) => acc + (p.cartas ? p.cartas.length : 0), 0))),
+          rounds: partida.ordemJogadores.length,
+        }}
+      />
       <footer className="mt-12 text-xs text-gray-400">Desenvolvido com Next.js, TypeScript e Tailwind CSS</footer>
       {canStart && (
         <div className="fixed bottom-8 left-0 w-full flex justify-center">

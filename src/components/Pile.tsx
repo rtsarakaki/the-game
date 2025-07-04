@@ -12,6 +12,7 @@ interface PileProps {
 }
 
 export default function Pile({ label, topCard, type, selected, onClick, disabled }: PileProps) {
+  const icon = type === "asc" ? "⬆️" : "⬇️";
   return (
     <div
       className={`flex flex-col items-center justify-center p-4 rounded-lg shadow-lg border-2 transition-all
@@ -19,7 +20,9 @@ export default function Pile({ label, topCard, type, selected, onClick, disabled
         ${selected ? "ring-4 ring-yellow-400" : ""}
       `}
     >
-      <span className="font-bold text-lg mb-2">{label}</span>
+      <span className="font-bold text-lg mb-2 flex items-center gap-1">
+        {label} <span>{icon}</span>
+      </span>
       <Card
         value={topCard}
         selected={selected}

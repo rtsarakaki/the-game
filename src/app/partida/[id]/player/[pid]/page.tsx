@@ -1,10 +1,9 @@
 "use client";
 import { use, useEffect, useState, useRef } from "react";
 import { isValidMove, PileType } from '@/domain/isValidMove';
-import { checkGameEnd } from '@/domain/checkGameEnd';
-import { isMovePossible } from '@/domain/isMovePossible';
 import Card from "@/components/Card";
 import StatsPanel from '@/components/StatsPanel';
+import GameEndOverlay from '@/components/GameEndOverlay';
 
 interface Player {
   id: string;
@@ -85,39 +84,6 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
       defeatPlayedRef.current = false;
     }
   }, [partida?.status]);
-
-  // Checa fim de jogo no início do turno do jogador
-  useEffect(() => {
-    if (!partida || !player) return;
-    if (!isMyTurn) return;
-    if (partida.status !== 'em_andamento' && partida.status !== 'in_progress') return;
-    const iPlayer = { name: player.nome, cards: player.cartas };
-    const iPlayers = partida.jogadores.map(j => ({ name: j.nome, cards: j.cartas }));
-    const checkDefeat = async () => {
-      if (!isMovePossible(iPlayer, partida.pilhas)) {
-        const status = checkGameEnd(
-          partida.baralho,
-          iPlayers,
-          partida.pilhas,
-          isMovePossible
-        );
-        if (status === 'defeat') {
-          const updated = { ...partida, status };
-          await fetch("/api/partida", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(updated),
-          });
-          const res = await fetch("/api/partida");
-          if (res.ok) {
-            const data = await res.json();
-            setPartida(data);
-          }
-        }
-      }
-    };
-    checkDefeat();
-  }, [isMyTurn, partida, player]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -227,34 +193,32 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
       ...partida.pilhas,
       [pileKey]: [...partida.pilhas[pileKey], card],
     };
-    // Checa fim de jogo após jogar carta
-    const iPlayers = updatedPlayers.map(j => ({ name: j.nome, cards: j.cartas }));
-    const status = checkGameEnd(
-      partida.baralho,
-      iPlayers,
-      updatedPiles,
-      isMovePossible
-    );
-    // Atualiza backend
-    const updated = {
+    // Após atualizar as cartas e pilhas, verificar se o jogador ainda pode jogar
+    const remainingCards = updatedPlayers.find(j => j.id === player.id)?.cartas || [];
+    const canStillPlay = remainingCards.some(card => {
+      return Object.entries(updatedPiles).some(([pileKey, pile]) => {
+        const pileType: PileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
+        const topCard = pile[pile.length - 1];
+        return isValidMove(pileType, topCard, card);
+      });
+    });
+    let updated = {
       ...partida,
       jogadores: updatedPlayers,
       pilhas: updatedPiles,
-      status,
     };
+    if (!canStillPlay && remainingCards.length > 0) {
+      updated = { ...updated, status: 'defeat' };
+    }
     await fetch("/api/partida", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updated),
     });
-    // Sempre buscar o estado atualizado após PUT
     const res = await fetch("/api/partida");
     if (res.ok) {
       const data = await res.json();
       setPartida(data);
-      if (data.status === 'defeat') {
-        setEndTurnError(null);
-      }
     }
     setPlayedThisTurn((prev) => [...prev, card]);
     setDraggedCard(null);
@@ -343,55 +307,60 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
         <section>
           <h2 className="text-lg font-semibold mb-2 text-gray-800">Pilhas (topo)</h2>
           <div className="grid grid-cols-2 gap-4">
-            {Object.entries(partida.pilhas).map(([key, pile]) => (
-              <div
-                key={key}
-                className={`flex flex-col items-center ${dropTarget === key ? "border-blue-500 border-2" : "border-transparent"} ${lastDrop === key ? "ring-4 ring-green-400 scale-105 animate-pulse" : ""} ${errorDrop === key ? "border-red-500 ring-2 ring-red-400" : ""}`}
-                onDragOver={e => {
-                  if (isTouchDevice) return;
-                  e.preventDefault();
-                  if (isMyTurn) setDropTarget(key);
-                  if (isMyTurn && draggedCard !== null && !canDropCard(draggedCard, key as keyof Piles)) {
-                    setErrorDrop(key);
-                  } else {
+            {Object.entries(partida.pilhas).map(([key, pile]) => {
+              const type = key.startsWith("asc") ? "asc" : "desc";
+              return (
+                <div
+                  key={key}
+                  className={`flex flex-col items-center ${dropTarget === key ? "border-blue-500 border-2" : "border-transparent"} ${lastDrop === key ? "ring-4 ring-green-400 scale-105 animate-pulse" : ""} ${errorDrop === key ? "border-red-500 ring-2 ring-red-400" : ""}`}
+                  onDragOver={e => {
+                    if (isTouchDevice) return;
+                    e.preventDefault();
+                    if (isMyTurn) setDropTarget(key);
+                    if (isMyTurn && draggedCard !== null && !canDropCard(draggedCard, key as keyof Piles)) {
+                      setErrorDrop(key);
+                    } else {
+                      setErrorDrop(null);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    if (isTouchDevice) return;
+                    setDropTarget(null);
                     setErrorDrop(null);
-                  }
-                }}
-                onDragLeave={() => {
-                  if (isTouchDevice) return;
-                  setDropTarget(null);
-                  setErrorDrop(null);
-                }}
-                onDrop={e => {
-                  if (isTouchDevice) return;
-                  e.preventDefault();
-                  if (isMyTurn && draggedCard !== null) {
-                    if (!canDropCard(draggedCard, key as keyof Piles)) {
-                      setErrorDrop(key);
-                      setTimeout(() => setErrorDrop(null), 500);
-                      return;
+                  }}
+                  onDrop={e => {
+                    if (isTouchDevice) return;
+                    e.preventDefault();
+                    if (isMyTurn && draggedCard !== null) {
+                      if (!canDropCard(draggedCard, key as keyof Piles)) {
+                        setErrorDrop(key);
+                        setTimeout(() => setErrorDrop(null), 500);
+                        return;
+                      }
+                      handlePlayCard(draggedCard, key as keyof Piles);
                     }
-                    handlePlayCard(draggedCard, key as keyof Piles);
-                  }
-                  setDropTarget(null);
-                }}
-                onClick={() => {
-                  if (!isMyTurn || !isTouchDevice) return;
-                  if (selectedCard !== null) {
-                    if (!canDropCard(selectedCard, key as keyof Piles)) {
-                      setErrorDrop(key);
-                      setTimeout(() => setErrorDrop(null), 500);
-                      return;
+                    setDropTarget(null);
+                  }}
+                  onClick={() => {
+                    if (!isMyTurn || !isTouchDevice) return;
+                    if (selectedCard !== null) {
+                      if (!canDropCard(selectedCard, key as keyof Piles)) {
+                        setErrorDrop(key);
+                        setTimeout(() => setErrorDrop(null), 500);
+                        return;
+                      }
+                      handlePlayCard(selectedCard, key as keyof Piles);
+                      setSelectedCard(null);
                     }
-                    handlePlayCard(selectedCard, key as keyof Piles);
-                    setSelectedCard(null);
-                  }
-                }}
-              >
-                <span className="text-xs text-gray-500 mb-1">{key.toUpperCase()}</span>
-                <Card value={pile[pile.length - 1]} selected={false} onClick={() => {}} disabled variant="pile" />
-              </div>
-            ))}
+                  }}
+                >
+                  <span className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                    {key.toUpperCase()} <span>{type === "asc" ? "⬆️" : "⬇️"}</span>
+                  </span>
+                  <Card value={pile[pile.length - 1]} selected={false} onClick={() => {}} disabled variant="pile" />
+                </div>
+              );
+            })}
           </div>
         </section>
         <StatsPanel
@@ -414,14 +383,13 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
           )}
         </section>
       </div>
-      {partida && ['defeat', 'derrota'].includes(partida.status) && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="bg-red-700 text-white rounded-lg shadow-lg p-8 text-center border-4 border-red-900 animate-pulse">
-            <h2 className="text-3xl font-bold mb-4">Derrota!</h2>
-            <p className="text-lg">Não há mais jogadas possíveis.<br />O jogo terminou.</p>
-          </div>
-        </div>
-      )}
+      <GameEndOverlay
+        status={partida.status}
+        stats={{
+          totalCardsPlayed: 98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + p.cartas.length, 0)),
+          rounds: partida.ordemJogadores.length,
+        }}
+      />
       <footer className="mt-12 text-xs text-gray-400">Desenvolvido com Next.js, TypeScript e Tailwind CSS</footer>
     </main>
   );

@@ -117,11 +117,15 @@ export default function JoinGamePage({ params }: { params: Promise<{ id: string 
     };
     // Checa fim de jogo
     const iPlayers = updatedPlayers.map(p => ({ name: p.nome, cards: p.cartas }));
+    const currentPlayerIndex = updatedPlayers.findIndex(p => p.nome === partida.jogadorAtual);
+    const minCardsPerTurn = partida.baralho.length === 0 ? 1 : 2;
     const status = checkGameEnd(
       partida.baralho,
       iPlayers,
       updatedPiles,
-      isMovePossible
+      isMovePossible,
+      currentPlayerIndex,
+      minCardsPerTurn
     );
     const updated = {
       ...partida,
@@ -161,11 +165,15 @@ export default function JoinGamePage({ params }: { params: Promise<{ id: string 
     })();
     // Checa fim de jogo
     const iPlayers2 = newPlayers.map(p => ({ name: p.nome, cards: p.cartas }));
+    const currentPlayerIndex2 = newPlayers.findIndex(p => p.nome === partida.jogadorAtual);
+    const minCardsPerTurn2 = newBaralho.length === 0 ? 1 : 2;
     const status2 = checkGameEnd(
       newBaralho,
       iPlayers2,
       partida.pilhas,
-      isMovePossible
+      isMovePossible,
+      currentPlayerIndex2,
+      minCardsPerTurn2
     );
     // Avançar para o próximo jogador
     const next = nextPlayer(partida.ordemJogadores, name);
