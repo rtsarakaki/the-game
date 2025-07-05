@@ -26,6 +26,8 @@ interface Partida {
   jogadorAtual: string;
   status: string;
   autoStarted?: boolean;
+  jogadasTurnoAtual?: number;
+  rodadasCompletas?: number;
 }
 
 interface GameStorage {
@@ -212,6 +214,9 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Game ID and partida are required' }, { status: 400 });
     }
     let updatedPartida = await checkAndAutoStart(gameId, partida);
+    // Inicializa campos se não existirem
+    if (typeof updatedPartida.jogadasTurnoAtual !== 'number') updatedPartida.jogadasTurnoAtual = 0;
+    if (typeof updatedPartida.rodadasCompletas !== 'number') updatedPartida.rodadasCompletas = 0;
     // Se for um PUT de finalizar turno (endTurn === true)
     if (endTurn) {
       const currentPlayer = updatedPartida.jogadores.find((j: Player) => j.id === updatedPartida.jogadorAtual);
@@ -238,7 +243,10 @@ export async function PUT(req: NextRequest) {
         const idx = updatedPartida.ordemJogadores.indexOf(updatedPartida.jogadorAtual);
         const nextIdx = (idx + 1) % updatedPartida.ordemJogadores.length;
         const nextPlayerId = updatedPartida.ordemJogadores[nextIdx];
-        updatedPartida = { ...updatedPartida, jogadorAtual: nextPlayerId };
+        // Incrementa rodadasCompletas se voltou ao primeiro jogador
+        let rodadasCompletas = updatedPartida.rodadasCompletas || 0;
+        if (nextIdx === 0) rodadasCompletas++;
+        updatedPartida = { ...updatedPartida, jogadorAtual: nextPlayerId, jogadasTurnoAtual: 0, rodadasCompletas };
         // Se o próximo não pode jogar nenhuma carta, derrota
         const nextPlayer = updatedPartida.jogadores.find((j: Player) => j.id === nextPlayerId);
         const canNextPlay = (nextPlayer?.cartas ?? []).some((card: number) => {
@@ -256,6 +264,9 @@ export async function PUT(req: NextRequest) {
       if (updatedPartida.status === 'em_andamento') {
         updatedPartida = replenishCardsForPreviousPlayer(updatedPartida, partida.jogadorAtual);
       }
+    } else {
+      // Jogada de carta: incrementa jogadasTurnoAtual
+      updatedPartida.jogadasTurnoAtual = (updatedPartida.jogadasTurnoAtual || 0) + 1;
     }
     await saveGame(gameId, updatedPartida);
     await notifyClients('partida:updated', updatedPartida);

@@ -219,6 +219,8 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
 
   const calculateCompletedRounds = () => {
     if (!partida || partida.status !== "em_andamento") return 0;
+    if (typeof partida.rodadasCompletas === 'number') return partida.rodadasCompletas;
+    // fallback legacy calculation
     const totalPlayers = partida.ordemJogadores.length;
     const currentPlayerIndex = partida.ordemJogadores.indexOf(partida.jogadorAtual);
     const initialCards = totalPlayers * 6;
@@ -293,17 +295,19 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
               errorDrop={errorDrop}
             />
           </section>
-          <GameStatsPanel
-            totalCardsPlayed={98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + (p && p.cards ? p.cards.length : 0), 0))}
-            cardsLeft={partida.baralho.length}
-            playersLeft={partida.jogadores.filter(p => p && p.cards && p.cards.length > 0).length}
-            rounds={calculateCompletedRounds()}
-          />
-          <TurnActions
-            isMyTurn={isMyTurn}
-            onEndTurn={handleEndTurn}
-            endTurnError={endTurnError}
-          />
+          <div className="flex flex-col-reverse gap-4 lg:flex-col">
+            <GameStatsPanel
+              totalCardsPlayed={98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + (p && p.cards ? p.cards.length : 0), 0))}
+              cardsLeft={partida.baralho.length}
+              playersLeft={partida.jogadores.filter(p => p && p.cards && p.cards.length > 0).length}
+              rounds={calculateCompletedRounds()}
+            />
+            <TurnActions
+              isMyTurn={isMyTurn}
+              onEndTurn={handleEndTurn}
+              endTurnError={endTurnError}
+            />
+          </div>
         </div>
       </div>
       <div className="block lg:hidden w-full max-w-4xl mt-8">

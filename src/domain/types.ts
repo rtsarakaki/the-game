@@ -1,7 +1,6 @@
 export interface IPlayer {
   id: string;
   name: string;
-  nome?: string;
   cards: number[];
 }
 
