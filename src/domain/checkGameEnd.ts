@@ -1,5 +1,6 @@
 import { IPlayer, Piles } from './types';
 import { isValidMove } from './isValidMove';
+import { nextPlayer } from './nextPlayer';
 
 export type GameStatus = 'victory' | 'defeat' | 'in_progress';
 
@@ -9,7 +10,10 @@ export const checkGameEnd = (
   piles: Piles,
   isMovePossible: (player: IPlayer, piles: Piles) => boolean,
   currentPlayerIndex?: number,
-  minCardsPerTurn?: number
+  minCardsPerTurn?: number,
+  currentTurnPlays?: number,
+  playerOrder?: string[],
+  currentPlayerId?: string
 ): GameStatus => {
   // Check for victory: all cards played and deck empty
   const allHandsEmpty = players.every((p) => p.cards.length === 0);
@@ -18,17 +22,14 @@ export const checkGameEnd = (
 
   // Check if ANY player can still make moves
   const anyPlayerCanPlay = players.some(p => isMovePossible(p, piles));
-  
-  // If no player can make any moves, game ends in defeat
   if (!anyPlayerCanPlay) return 'defeat';
 
-  // If we have a current player context, check if they can meet minimum requirements
   if (typeof currentPlayerIndex === 'number' && typeof minCardsPerTurn === 'number') {
     const currentPlayer = players[currentPlayerIndex];
     if (currentPlayer) {
+      const canCurrentPlay = isMovePossible(currentPlayer, piles);
+      // Conta quantas jogadas possíveis para o mínimo
       let possibleMoves = 0;
-      
-      // Count how many moves the current player can make
       for (const card of currentPlayer.cards) {
         for (const [pileKey, pile] of Object.entries(piles)) {
           const pileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
@@ -40,26 +41,23 @@ export const checkGameEnd = (
         }
         if (possibleMoves >= minCardsPerTurn) break;
       }
-      
-      // If current player can't meet minimum requirements but OTHER players can still play,
-      // the current player should pass their turn (not end the game)
-      if (possibleMoves < minCardsPerTurn) {
-        // Check if other players can still play
-        const otherPlayersCanPlay = players.some((p, index) => 
-          index !== currentPlayerIndex && isMovePossible(p, piles)
-        );
-        
-        // Only end in defeat if NO ONE can play (already checked above)
-        // If others can play, the game should continue (current player passes turn)
-        if (otherPlayersCanPlay) {
-          return 'in_progress'; // Game continues, current player will be forced to pass
-        }
-        
-        // If we reach here, no one can play, so it's defeat (but this is redundant with the check above)
+      // 1. Se não cumpriu o mínimo e não pode jogar, derrota
+      if ((typeof currentTurnPlays === 'number' && currentTurnPlays < minCardsPerTurn) && !canCurrentPlay) {
         return 'defeat';
       }
+      // 2. Se já cumpriu o mínimo e não pode jogar, verifica o próximo jogador
+      if ((typeof currentTurnPlays === 'number' && currentTurnPlays >= minCardsPerTurn) && !canCurrentPlay) {
+        if (playerOrder && currentPlayerId) {
+          const nextId = nextPlayer(playerOrder, currentPlayerId);
+          const next = players.find(p => p.id === nextId);
+          if (next && !isMovePossible(next, piles)) {
+            return 'defeat';
+          }
+        }
+        return 'in_progress';
+      }
+      // 3. Se pode jogar, ou não está travado, jogo continua normalmente
     }
   }
-
   return 'in_progress';
 }; 

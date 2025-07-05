@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { IGame, IPlayer } from '@/domain/types';
 
 interface UseGameSocketParams {
@@ -10,6 +10,8 @@ interface UseGameSocketParams {
 }
 
 export function useGameSocket({ id, playerId, setGame, setPlayer, setGameStartNotification }: UseGameSocketParams) {
+  const prevStatusRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
     if (!id || !playerId) return;
     // Simulate socket by polling for now
@@ -21,9 +23,14 @@ export function useGameSocket({ id, playerId, setGame, setPlayer, setGameStartNo
         setGame(game);
         const foundPlayer = game.players.find((player) => player.id === playerId) || null;
         setPlayer(foundPlayer);
-        if (setGameStartNotification && game.status === 'in_progress') {
+        if (
+          setGameStartNotification &&
+          game.status === 'in_progress' &&
+          prevStatusRef.current !== 'in_progress'
+        ) {
           setGameStartNotification(true);
         }
+        prevStatusRef.current = game.status;
       } catch {
         // ignore
       }

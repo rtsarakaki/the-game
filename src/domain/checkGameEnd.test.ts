@@ -106,4 +106,18 @@ describe('checkGameEnd', () => {
     const result = checkGameEnd(deck, players, pilesReal, isMovePossible, 1, 2);
     expect(result).toBe('in_progress'); // Game should continue, not end in defeat
   });
+
+  it('should return defeat when current player cannot meet minimum and has no possible moves, even if other players can play', () => {
+    const players: IPlayer[] = [
+      { id: 'A', name: 'A', cards: [50] }, // Current player - can't make 2 moves, and can't play at all
+      { id: 'B', name: 'B', cards: [2, 3] }, // Other player - can make moves
+    ];
+    const deck: number[] = [1, 2];
+    // Mock: A cannot play, B can play
+    const isMovePossible = jest.fn()
+      .mockImplementation((player: IPlayer) => player.id === 'B');
+    // A é o jogador atual (index 0), precisa de 2 jogadas, mas não pode jogar nenhuma
+    const result = checkGameEnd(deck, players, piles, isMovePossible, 0, 2);
+    expect(result).toBe('defeat');
+  });
 }); 

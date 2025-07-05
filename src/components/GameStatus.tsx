@@ -10,6 +10,7 @@ interface GameStatusProps {
 
 export default function GameStatus({ status, stats }: GameStatusProps) {
   const playedSuccess = useRef(false);
+  const playedDefeat = useRef(false);
 
   useEffect(() => {
     if ((status === "vitoria" || status === "victory") && !playedSuccess.current) {
@@ -17,8 +18,16 @@ export default function GameStatus({ status, stats }: GameStatusProps) {
       audio.play();
       playedSuccess.current = true;
     }
-    if (status !== "vitoria" && status !== "victory" && status !== "derrota" && status !== "defeat") {
+    if ((status === "derrota" || status === "defeat") && !playedDefeat.current) {
+      const audio = new Audio("/sounds/lose.mp3");
+      audio.play();
+      playedDefeat.current = true;
+    }
+    if (status !== "vitoria" && status !== "victory") {
       playedSuccess.current = false;
+    }
+    if (status !== "derrota" && status !== "defeat") {
+      playedDefeat.current = false;
     }
   }, [status]);
 

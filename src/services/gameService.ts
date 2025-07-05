@@ -2,6 +2,8 @@
 
 import type { IGame } from '@/domain/types';
 import { v4 as uuidv4 } from 'uuid';
+import { shuffleDeck } from '@/domain/shuffleDeck';
+import { dealCards } from '@/domain/dealCards';
 
 export async function fetchGame(gameId: string): Promise<IGame> {
   const response = await fetch(`/api/partida?gameId=${gameId}`);
@@ -54,4 +56,35 @@ export async function createGame(numPlayers: number): Promise<string> {
   });
   if (!res.ok) throw new Error("Erro ao criar partida");
   return gameId;
+}
+
+export async function restartGame(game: IGame): Promise<IGame> {
+  const shuffledDeck = shuffleDeck(Array.from({ length: 98 }, (_, i) => i + 2));
+  const { players, deck } = dealCards(shuffledDeck, game.players.map(player => player.name), 6);
+  const playerOrder = game.players.map(player => player.id);
+  const restartedGame: IGame = {
+    ...game,
+    timestamp: Date.now(),
+    players: game.players.map((player, idx) => ({
+      ...player,
+      cards: players[idx].cards,
+    })),
+    piles: {
+      asc1: [1],
+      asc2: [1],
+      desc1: [100],
+      desc2: [100],
+    },
+    deck,
+    playerOrder,
+    currentPlayer: playerOrder[0],
+    status: "in_progress",
+  };
+  const res = await fetch("/api/partida", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ gameId: game.id, game: restartedGame }),
+  });
+  if (!res.ok) throw new Error("Erro ao reiniciar partida");
+  return await res.json();
 } 

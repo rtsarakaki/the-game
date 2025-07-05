@@ -4,6 +4,8 @@ import path from 'path';
 import { shuffleDeck } from '@/domain/shuffleDeck';
 import { dealCards } from '@/domain/dealCards';
 import { isValidMove } from '@/domain/isValidMove';
+import { checkGameEnd } from '@/domain/checkGameEnd';
+import { isMovePossible } from '@/domain/isMovePossible';
 import type { IGame, IPlayer } from '@/domain/types';
 
 const isVercel = !!process.env.VERCEL;
@@ -164,19 +166,19 @@ function passTurnToNextPlayer(game: IGame): IGame {
   return { ...game, currentPlayer: nextPlayerId, currentTurnPlays: 0, completedRounds };
 }
 
-function checkDefeatForNextPlayer(game: IGame): IGame {
-  const nextPlayer = game.players.find((player: IPlayer) => player.id === game.currentPlayer);
-  const canNextPlay = (nextPlayer?.cards ?? []).some((card: number) => {
-    return Object.entries(game.piles).some(([pileKey, pile]: [string, number[]]) => {
-      const pileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
-      const topCard = pile[pile.length - 1];
-      return isValidMove(pileType, topCard, card);
-    });
-  });
-  if (!canNextPlay) {
-    return { ...game, status: 'defeat' };
-  }
-  return game;
+function checkGameStatus(game: IGame, currentPlayerIndex?: number, minCardsPerTurn?: number): IGame {
+  const status = checkGameEnd(
+    game.deck,
+    game.players,
+    game.piles,
+    isMovePossible,
+    typeof currentPlayerIndex === 'number' ? currentPlayerIndex : undefined,
+    typeof minCardsPerTurn === 'number' ? minCardsPerTurn : undefined,
+    typeof game.currentTurnPlays === 'number' ? game.currentTurnPlays : undefined,
+    game.playerOrder,
+    game.currentPlayer
+  );
+  return { ...game, status };
 }
 
 async function saveAndNotify(gameId: string, game: IGame): Promise<void> {
@@ -197,7 +199,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
     }
     game = await checkAndAutoStart(gameId, game);
-    return NextResponse.json(mapGameToFrontend(game));
+    // Validate game status before returning
+    const currentPlayerIndex = game.players.findIndex((p) => p.id === game.currentPlayer);
+    const minCardsPerTurn = game.deck.length === 0 ? 1 : 2;
+    const checkedGame = checkGameStatus(game, currentPlayerIndex, minCardsPerTurn);
+    if (checkedGame.status !== game.status) {
+      await saveGame(gameId, checkedGame);
+    }
+    return NextResponse.json(mapGameToFrontend(checkedGame));
   } catch (error) {
     console.error('Error in GET:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -245,12 +254,15 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ error: `You must play at least ${minCardsPerTurn} card(s) or not be able to play any more.`, debug: validation.debugInfo }, { status: 400 });
       }
       updatedGame = passTurnToNextPlayer(updatedGame);
-      updatedGame = checkDefeatForNextPlayer(updatedGame);
+      const nextPlayerIndex = updatedGame.players.findIndex((p) => p.id === updatedGame.currentPlayer);
+      updatedGame = checkGameStatus(updatedGame, nextPlayerIndex, minCardsPerTurn);
       if (updatedGame.status === 'in_progress') {
         updatedGame = replenishCardsForPreviousPlayer(updatedGame, game.currentPlayer);
       }
     } else {
       updatedGame.currentTurnPlays = (updatedGame.currentTurnPlays || 0) + 1;
+      const currentPlayerIndex2 = updatedGame.players.findIndex((p) => p.id === updatedGame.currentPlayer);
+      updatedGame = checkGameStatus(updatedGame, currentPlayerIndex2, updatedGame.deck.length === 0 ? 1 : 2);
     }
     // Log after saving
     const after = updatedGame.players.map(player => ({ id: player.id, cards: player.cards }));
