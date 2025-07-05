@@ -15,6 +15,11 @@ export const checkGameEnd = (
   playerOrder?: string[],
   currentPlayerId?: string
 ): GameStatus => {
+  // Proteção: jogo recém-iniciado, ninguém recebeu cartas ainda
+  if (players.length === 0 || (players.every(p => p.cards.length === 0) && deck.length > 0)) {
+    return 'in_progress';
+  }
+
   // Check for victory: all cards played and deck empty
   const allHandsEmpty = players.every((p) => p.cards.length === 0);
   const deckEmpty = deck.length === 0;
