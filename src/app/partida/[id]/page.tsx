@@ -1,303 +1,420 @@
 "use client";
-import { useEffect, useState, use } from "react";
-import AdminPanel from "./AdminPanel";
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 import GameBoard from "@/components/GameBoard";
-import { Piles } from "@/domain/types";
-import { nextPlayer } from "@/domain/nextPlayer";
-import PlayerList from "@/components/PlayerList";
-import GameStatus from "@/components/GameStatus";
-import { checkGameEnd } from "@/domain/checkGameEnd";
-import { isMovePossible } from "@/domain/isMovePossible";
-import ActionButton from "@/components/ActionButton";
-import ErrorPanel from "@/components/ErrorPanel";
-import StatsPanel from "@/components/StatsPanel";
+import { CopyIcon, EmailIcon, WhatsAppIcon, CopyAllIcon, CheckIcon, OpenInNewTabIcon, IncognitoIcon } from "@/components/ShareIcons";
+import React from "react";
+import { shuffleDeck } from "@/domain/shuffleDeck";
+import { dealCards } from "@/domain/dealCards";
+import { usePartidaSocket } from '@/hooks/usePartidaSocket';
+import type { IPartida } from '@/domain/types';
 
-interface Player {
-  nome: string;
-  cartas: number[];
-}
-
-interface GameData {
-  id: string;
-  jogadores: Player[];
-  pilhas: {
-    asc1: number[];
-    asc2: number[];
-    desc1: number[];
-    desc2: number[];
-  };
-  baralho: number[];
-  ordemJogadores: string[];
-  jogadorAtual: string;
-  status: string;
-}
-
-export default function JoinGamePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const [name, setName] = useState("");
-  const [partida, setPartida] = useState<GameData | null>(null);
+export default function GamePage() {
+  const params = useParams();
+  const router = useRouter();
+  const gameId = params ? (Array.isArray(params.id) ? params.id[0] : params.id) : '';
+  
+  const [partida, setPartida] = useState<IPartida | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [playedThisTurn, setPlayedThisTurn] = useState<number[]>([]);
+  const [restarting, setRestarting] = useState(false);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
 
-  // Polling for partida
+  usePartidaSocket({
+    id: gameId,
+    pid: "observer",
+    setPartida,
+    setPlayer: () => {},
+  });
+
+  // Fetch inicial da partida
   useEffect(() => {
-    const fetchGame = async () => {
-      try {
-        const res = await fetch(`/api/partida`);
-        const data: GameData = await res.json();
-        if (data.id !== id) return;
+    if (!gameId) return;
+    console.log('[DEBUG] Iniciando fetch inicial da partida', gameId);
+    fetch(`/api/partida?gameId=${gameId}`)
+      .then(res => {
+        console.log('[DEBUG] Resposta do fetch inicial', res);
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then(data => {
+        console.log('[DEBUG] Dados recebidos do fetch inicial', data);
         setPartida(data);
-      } catch {}
-    };
-    fetchGame();
-    const interval = setInterval(fetchGame, 1500);
-    return () => clearInterval(interval);
-  }, [id]);
+        setError(null);
+      })
+      .catch((err) => {
+        console.error('[DEBUG] Erro ao carregar partida', err);
+        setError("Erro ao carregar partida");
+      });
+  }, [gameId]);
 
-  const handleJoin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+  // Debug para eventos do WebSocket
+  useEffect(() => {
+    if (!partida) return;
+    console.log('[DEBUG] Estado da partida atualizado via WebSocket ou fetch', partida);
+  }, [partida]);
+
+  // Early return if no gameId
+  if (!gameId) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
+        <div className="bg-red-100 border border-red-400 rounded-lg p-6 max-w-md text-center">
+          <h1 className="text-2xl font-bold text-red-700 mb-2">Erro</h1>
+          <p className="text-red-600 mb-4">ID da partida não encontrado</p>
+          <button
+            onClick={() => router.push("/")}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+          >
+            Voltar ao Início
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const handleRestart = async () => {
+    if (!partida) return;
+    setRestarting(true);
     try {
-      const res = await fetch(`/api/partida`);
-      const data: GameData = await res.json();
-      if (data.id !== id) {
-        setError("Partida não encontrada.");
-        setLoading(false);
-        return;
-      }
-      if (data.jogadores.length >= 6) {
-        setError("Máximo de 6 jogadores atingido.");
-        setLoading(false);
-        return;
-      }
-      if (data.jogadores.some((p) => p.nome === name)) {
-        setError("Nome já utilizado.");
-        setLoading(false);
-        return;
-      }
-      const updated = {
-        ...data,
-        jogadores: [...data.jogadores, { nome: name, cartas: [] }],
+      // Embaralhar e redistribuir cartas
+      const shuffled = shuffleDeck(Array.from({ length: 98 }, (_, i) => i + 2));
+      const nomes = partida.jogadores.map(j => j.name || `Jogador`);
+      const { players, deck } = dealCards(shuffled, nomes, 6);
+      const ordemJogadores = partida.jogadores.map(j => j.id);
+      const newPartida = {
+        ...partida,
+        timestamp: Date.now(),
+        jogadores: players.map((p, idx) => ({
+          ...partida.jogadores[idx],
+          name: p.name,
+          cartas: p.cards,
+        })),
+        pilhas: {
+          asc1: [1],
+          asc2: [1],
+          desc1: [100],
+          desc2: [100],
+        },
+        baralho: deck,
+        ordemJogadores,
+        jogadorAtual: ordemJogadores[0],
+        status: "em_andamento",
       };
-      const putRes = await fetch(`/api/partida`, {
+      const res = await fetch("/api/partida", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updated),
+        body: JSON.stringify({ gameId, partida: newPartida }),
       });
-      if (!putRes.ok) throw new Error();
-      setPartida(updated);
-      setName("");
-    } catch {
-      setError("Erro ao entrar na partida.");
+      if (!res.ok) throw new Error("Erro ao reiniciar partida");
+      // Buscar o estado atualizado imediatamente após reiniciar
+      const data = await fetch(`/api/partida?gameId=${gameId}`).then(r => r.json());
+      setPartida(data);
+    } catch (err) {
+      setError("Erro ao reiniciar partida");
+      console.error(err);
     } finally {
-      setLoading(false);
+      setRestarting(false);
     }
   };
 
-  const isAdmin = !!(partida && partida.jogadores && partida.jogadores.length > 0 && partida.jogadores[0].nome === name);
-
-  // Helper: retorna o jogador atual
-  const currentPlayer = partida?.jogadorAtual;
-  const isCurrentPlayer = currentPlayer === name;
-  const playerObj = partida?.jogadores.find((p) => p.nome === name);
-
-  // Lógica de jogar carta
-  const handlePlay = async (card: number, pileKey: keyof Piles) => {
-    if (!partida || !playerObj) return;
-    // Remove carta do jogador
-    const updatedPlayers = partida.jogadores.map((p) =>
-      p.nome === name ? { ...p, cartas: p.cartas.filter((c) => c !== card) } : p
-    );
-    // Atualiza pilha
-    const updatedPiles = {
-      ...partida.pilhas,
-      [pileKey]: [...partida.pilhas[pileKey], card],
-    };
-    // Checa fim de jogo
-    const iPlayers = updatedPlayers.map(p => ({ name: p.nome, cards: p.cartas }));
-    const currentPlayerIndex = updatedPlayers.findIndex(p => p.nome === partida.jogadorAtual);
-    const minCardsPerTurn = partida.baralho.length === 0 ? 1 : 2;
-    const status = checkGameEnd(
-      partida.baralho,
-      iPlayers,
-      updatedPiles,
-      isMovePossible,
-      currentPlayerIndex,
-      minCardsPerTurn
-    );
-    const updated = {
-      ...partida,
-      jogadores: updatedPlayers,
-      pilhas: updatedPiles,
-      status,
-    };
-    setPartida(updated);
-    setPlayedThisTurn((prev) => [...prev, card]);
-    await fetch(`/api/partida`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updated),
-    });
-  };
-
-  const handleEndTurn = async () => {
-    if (!partida || !playerObj) return;
-    const minPlays = partida.baralho.length === 0 ? 1 : 2;
-    if (playedThisTurn.length < minPlays) {
-      setError(`Você deve jogar pelo menos ${minPlays} carta${minPlays > 1 ? 's' : ''} neste turno.`);
-      return;
+  const copyToClipboard = async (text: string, linkId: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedLinkId(linkId);
+      setTimeout(() => setCopiedLinkId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
     }
-    // Compra de cartas
-    const { newBaralho, newPlayers } = (() => {
-      let baralho = [...partida.baralho];
-      const players = [...partida.jogadores];
-      const playerIdx = players.findIndex((p) => p.nome === name);
-      while (baralho.length > 0 && players[playerIdx].cartas.length < 6) {
-        players[playerIdx] = {
-          ...players[playerIdx],
-          cartas: [...players[playerIdx].cartas, baralho[0]],
-        };
-        baralho = baralho.slice(1);
-      }
-      return { newBaralho: baralho, newPlayers: players };
-    })();
-    // Checa fim de jogo
-    const iPlayers2 = newPlayers.map(p => ({ name: p.nome, cards: p.cartas }));
-    const currentPlayerIndex2 = newPlayers.findIndex(p => p.nome === partida.jogadorAtual);
-    const minCardsPerTurn2 = newBaralho.length === 0 ? 1 : 2;
-    const status2 = checkGameEnd(
-      newBaralho,
-      iPlayers2,
-      partida.pilhas,
-      isMovePossible,
-      currentPlayerIndex2,
-      minCardsPerTurn2
-    );
-    // Avançar para o próximo jogador
-    const next = nextPlayer(partida.ordemJogadores, name);
-    const updated = {
-      ...partida,
-      jogadorAtual: next,
-      jogadores: newPlayers,
-      baralho: newBaralho,
-      status: status2,
-    };
-    setPartida(updated);
-    setPlayedThisTurn([]);
-    await fetch(`/api/partida`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updated),
-    });
   };
 
-  // Reset playedThisTurn quando mudar de jogador
-  useEffect(() => {
-    setPlayedThisTurn([]);
-  }, [partida?.jogadorAtual]);
+  const shareViaEmail = (playerName: string, url: string) => {
+    const subject = encodeURIComponent(`The Game - Convite para Partida`);
+    const body = encodeURIComponent(
+      `Olá ${playerName}!\n\n` +
+      `Você foi convidado(a) para jogar The Game!\n\n` +
+      `Clique no link abaixo para entrar na partida:\n${url}\n\n` +
+      `Divirta-se! 🎮`
+    );
+    window.open(`mailto:?subject=${subject}&body=${body}`);
+  };
+
+  const shareViaWhatsApp = (playerName: string, url: string) => {
+    const message = encodeURIComponent(
+      `🎮 *The Game - Convite para Partida*\n\n` +
+      `Olá ${playerName}!\n\n` +
+      `Você foi convidado(a) para jogar The Game!\n\n` +
+      `Clique no link para entrar na partida:\n${url}\n\n` +
+      `Divirta-se! 🎯`
+    );
+    window.open(`https://wa.me/?text=${message}`);
+  };
+
+  const copyAllLinks = () => {
+    if (!partida) return;
+    
+    const allLinks = partida.jogadores.map((player, index) => 
+      `Jogador ${index + 1}: ${window.location.origin}/partida/${gameId}/player/${player.id}`
+    ).join('\n');
+    
+    copyToClipboard(allLinks, 'all-links');
+  };
+
+  const getStatusDisplay = () => {
+    if (!partida) return "";
+    
+    switch (partida.status) {
+      case "esperando_jogadores":
+        return "⏳ Aguardando Jogadores";
+      case "em_andamento":
+        return "🎮 Em Andamento";
+      case "victory":
+        return "🏆 Vitória!";
+      case "defeat":
+        return "💀 Derrota";
+      default:
+        return partida.status;
+    }
+  };
+
+  const getCurrentPlayerName = () => {
+    if (!partida) return "";
+    const currentPlayer = partida.jogadores.find(p => p.id === partida.jogadorAtual);
+    return currentPlayer?.name || "Jogador sem nome";
+  };
+
+  const getTimeRemaining = () => {
+    if (!partida) return "";
+    const now = Date.now();
+    const elapsed = now - (partida.timestamp ?? 0);
+    const remaining = (24 * 60 * 60 * 1000) - elapsed; // 24 hours - elapsed
+    
+    if (remaining <= 0) return "Expirado";
+    
+    const hours = Math.floor(remaining / (60 * 60 * 1000));
+    const minutes = Math.floor((remaining % (60 * 60 * 1000)) / (60 * 1000));
+    
+    return `${hours}h ${minutes}m restantes`;
+  };
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
+        <div className="bg-red-100 border border-red-400 rounded-lg p-6 max-w-md text-center">
+          <h1 className="text-2xl font-bold text-red-700 mb-2">Erro</h1>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={() => router.push("/")}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+          >
+            Voltar ao Início
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!partida) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
+        <div className="bg-yellow-100 border border-yellow-400 rounded-lg p-6 max-w-md text-center">
+          <h1 className="text-2xl font-bold text-yellow-700 mb-2">Partida não encontrada</h1>
+          <p className="text-yellow-600 mb-4">Verifique o link ou tente novamente.</p>
+          <button
+            onClick={() => router.push("/")}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+          >
+            Voltar ao Início
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const playerLinks = partida.jogadores.map((player, index) => ({
+    id: player.id,
+    name: player.name || `Jogador ${index + 1}`,
+    url: `${window.location.origin}/partida/${gameId}/player/${player.id}`,
+    hasName: !!player.name?.trim(),
+  }));
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
-      <h1 className="text-2xl font-bold text-white mb-6">Entrar na Partida</h1>
-      <form onSubmit={handleJoin} className="flex flex-col items-center gap-4 w-full max-w-xs">
-        <input
-          type="text"
-          placeholder="Seu nome ou apelido"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="px-4 py-2 rounded border w-full"
-          required
-          minLength={2}
-          maxLength={16}
-          disabled={!!(loading || (partida && partida.jogadores.length >= 6))}
-        />
-        <button
-          type="submit"
-          className="px-6 py-2 bg-green-600 text-white rounded shadow hover:bg-green-700 transition disabled:opacity-50"
-          disabled={!!(loading || (partida && partida.jogadores.length >= 6) || !name.trim())}
-        >
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
-      </form>
-      <ErrorPanel>{error}</ErrorPanel>
-      {partida && isAdmin ? (
-        <AdminPanel partida={partida} onUpdate={setPartida} />
-      ) : (
-        <div className="mt-8 bg-white/90 rounded p-4 shadow w-full max-w-xs">
-          <h2 className="text-lg font-semibold mb-2 text-gray-800">Jogadores</h2>
-          <PlayerList players={partida?.jogadores.map((p) => p.nome) ?? []} currentPlayer={partida?.jogadorAtual} />
-          <p className="mt-2 text-sm text-gray-500">
-            {partida && partida.jogadores.length < 2
-              ? "Aguardando mais jogadores... (mínimo 2)"
-              : partida && partida.jogadores.length === 6
-              ? "Máximo de jogadores atingido. Aguarde o início."
-              : "Aguardando início da partida..."}
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800 mb-2">The Game - Partida {gameId.slice(0, 8)}</h1>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
+                  {getStatusDisplay()}
+                </span>
+                {partida.status === "em_andamento" && (
+                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full">
+                    Turno: {getCurrentPlayerName()}
+                  </span>
+                )}
+                <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full">
+                  {getTimeRemaining()}
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => router.push("/")}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+              >
+                🏠 Início
+              </button>
+              <button
+                onClick={handleRestart}
+                disabled={restarting}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition disabled:opacity-50"
+              >
+                {restarting ? "Reiniciando..." : "🔄 Reiniciar Partida"}
+              </button>
+            </div>
+          </div>
         </div>
-      )}
-      {partida && partida.status === "em_andamento" && playerObj && (
-        <>
-          <GameBoard
-            piles={partida.pilhas}
-            player={{ name: playerObj.nome, cards: playerObj.cartas }}
-            onPlay={handlePlay}
-            isCurrentPlayer={isCurrentPlayer}
-          />
-          {isCurrentPlayer && (
-            <ActionButton
-              color="secondary"
-              className="mt-6"
-              onClick={handleEndTurn}
-              disabled={playedThisTurn.length < (partida.baralho.length === 0 ? 1 : 2)}
+
+        {/* Player Links */}
+        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-800">Links dos Jogadores</h2>
+            <button
+              onClick={copyAllLinks}
+              className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition flex items-center gap-1"
             >
-              Encerrar turno
-            </ActionButton>
+              {copiedLinkId === 'all-links' ? (
+                <>
+                  <CheckIcon size={14} className="text-white" />
+                  Copiados!
+                </>
+              ) : (
+                <>
+                  <CopyAllIcon size={14} className="text-white" />
+                  Copiar Todos
+                </>
+              )}
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {playerLinks.map((player, index) => (
+              <div
+                key={player.id}
+                className={`p-4 rounded-lg border-2 ${
+                  player.hasName
+                    ? "border-green-200 bg-green-50"
+                    : "border-gray-200 bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-800">
+                      {player.hasName ? player.name : `Jogador ${index + 1}`}
+                    </span>
+                    {player.hasName ? (
+                      <span className="text-green-600 text-xs bg-green-100 px-2 py-1 rounded-full">✓ Conectado</span>
+                    ) : (
+                      <span className="text-gray-500 text-xs bg-gray-100 px-2 py-1 rounded-full">⏳ Aguardando</span>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    value={player.url}
+                    readOnly
+                    className="w-full p-2 text-xs bg-gray-100 border rounded font-mono text-gray-600"
+                  />
+                </div>
+                
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => copyToClipboard(player.url, player.id)}
+                    className="p-2 bg-blue-100 hover:bg-blue-200 rounded transition flex items-center justify-center"
+                    title="Copiar link"
+                    aria-label="Copiar link"
+                  >
+                    {copiedLinkId === player.id ? (
+                      <CheckIcon size={16} className="text-blue-600" />
+                    ) : (
+                      <CopyIcon size={16} className="text-blue-600" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => window.open(player.url, '_blank')}
+                    className="p-2 bg-gray-100 hover:bg-gray-200 rounded transition flex items-center justify-center"
+                    title="Abrir em nova aba"
+                    aria-label="Abrir em nova aba"
+                  >
+                    <OpenInNewTabIcon size={16} className="text-gray-700" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      copyToClipboard(player.url, player.id);
+                      alert('Link copiado! Abra manualmente uma aba anônima e cole o link.');
+                    }}
+                    className="p-2 bg-gray-100 hover:bg-gray-200 rounded transition flex items-center justify-center"
+                    title="Abrir em aba anônima (copiar link)"
+                    aria-label="Abrir em aba anônima"
+                  >
+                    <IncognitoIcon size={16} className="text-gray-700" />
+                  </button>
+                  <button
+                    onClick={() => shareViaEmail(player.hasName ? player.name : `Jogador ${index + 1}`, player.url)}
+                    className="p-2 bg-gray-100 hover:bg-gray-200 rounded transition flex items-center justify-center"
+                    title="Compartilhar por Email"
+                    aria-label="Compartilhar por Email"
+                  >
+                    <EmailIcon size={16} className="text-gray-700" />
+                  </button>
+                  <button
+                    onClick={() => shareViaWhatsApp(player.hasName ? player.name : `Jogador ${index + 1}`, player.url)}
+                    className="p-2 bg-green-100 hover:bg-green-200 rounded transition flex items-center justify-center"
+                    title="Compartilhar no WhatsApp"
+                    aria-label="Compartilhar no WhatsApp"
+                  >
+                    <WhatsAppIcon size={16} className="text-green-700" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
+            <p className="text-blue-700 text-sm">
+              💡 <strong>Dica:</strong> Compartilhe os links individualmente ou use &quot;Copiar Todos&quot; para enviar de uma vez.
+              Cada jogador deve usar seu link específico para entrar na partida.
+            </p>
+          </div>
+        </div>
+
+        {/* Game Board */}
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">Tabuleiro do Jogo</h2>
+          <GameBoard 
+            piles={partida.pilhas}
+            player={{ id: "observer", name: "Observador", cards: [] }} // Observer mode - no player interaction
+            onPlay={() => {}} // No interaction for observers
+            isCurrentPlayer={false} // Observers can't play
+          />
+          
+          {partida.status === "esperando_jogadores" && (
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
+              <p className="text-blue-700 font-medium mb-2">
+                Aguardando jogadores se conectarem...
+              </p>
+              <p className="text-blue-600 text-sm">
+                Compartilhe os links acima para que os jogadores possam entrar na partida.
+                O jogo iniciará automaticamente quando todos fornecerem seus nomes.
+              </p>
+            </div>
           )}
-        </>
-      )}
-      {partida && ["vitoria", "derrota"].includes(partida.status) && (
-        <>
-          <GameStatus
-            status={partida.status}
-            stats={{
-              totalCardsPlayed:
-                98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + p.cartas.length, 0)),
-              rounds: partida.ordemJogadores.length,
-            }}
-          />
-          <StatsPanel
-            totalCardsPlayed={98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + p.cartas.length, 0))}
-            cardsLeft={partida.baralho.length}
-            playersLeft={partida.jogadores.filter(p => p.cartas.length > 0).length}
-            rounds={partida.ordemJogadores.length}
-          />
-          <ActionButton
-            color="primary"
-            className="mt-6"
-            onClick={async () => {
-              // Reset partida
-              const res = await fetch(`/api/partida`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  id: partida.id,
-                  jogadores: [],
-                  pilhas: { asc1: [1], asc2: [1], desc1: [100], desc2: [100] },
-                  baralho: Array.from({ length: 98 }, (_, i) => i + 2),
-                  ordemJogadores: [],
-                  jogadorAtual: "",
-                  status: "esperando_jogadores",
-                }),
-              });
-              if (res.ok) window.location.reload();
-            }}
-          >
-            Iniciar nova partida
-          </ActionButton>
-        </>
-      )}
-    </main>
+        </div>
+      </div>
+    </div>
   );
 } 

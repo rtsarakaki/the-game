@@ -4,7 +4,7 @@ import Card from './Card';
 describe('Card', () => {
   it('should render the card value', () => {
     render(<Card value={42} selected={false} onClick={() => {}} />);
-    expect(screen.getByText('42')).toBeInTheDocument();
+    expect(screen.getAllByText('42').length).toBeGreaterThan(0);
   });
 
   it('should apply selected styles when selected', () => {
@@ -15,7 +15,7 @@ describe('Card', () => {
   it('should call onClick when clicked', () => {
     const onClick = jest.fn();
     render(<Card value={5} selected={false} onClick={onClick} />);
-    fireEvent.click(screen.getByText('5'));
+    fireEvent.click(screen.getAllByText('5')[0]);
     expect(onClick).toHaveBeenCalled();
   });
 

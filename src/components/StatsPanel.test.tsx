@@ -10,7 +10,7 @@ describe('StatsPanel', () => {
     expect(screen.getByText('5')).toBeInTheDocument();
     expect(screen.getByText('Jogadores restantes:')).toBeInTheDocument();
     expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('Rodadas:')).toBeInTheDocument();
+    expect(screen.getByText('Rodadas completas:')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
   });
 }); 

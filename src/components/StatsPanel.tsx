@@ -13,7 +13,7 @@ export default function StatsPanel({ totalCardsPlayed, rounds, cardsLeft, player
       <div>Cartas jogadas: <span className="font-bold">{totalCardsPlayed}</span></div>
       <div>Cartas restantes: <span className="font-bold">{cardsLeft}</span></div>
       <div>Jogadores restantes: <span className="font-bold">{playersLeft}</span></div>
-      <div>Rodadas: <span className="font-bold">{rounds}</span></div>
+      <div>Rodadas completas: <span className="font-bold">{rounds}</span></div>
     </div>
   );
 } 

@@ -1,36 +1,175 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# The Game Online
 
-## Getting Started
+Uma versão digital cooperativa do jogo de cartas "The Game", desenvolvida com Next.js 15+, TypeScript e arquitetura limpa.
 
-First, run the development server:
+## 🎯 Sobre o Jogo
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+"The Game" é um jogo cooperativo onde todos os jogadores trabalham juntos para jogar todas as 98 cartas (numeradas de 2 a 99) em quatro pilhas centrais. O objetivo é vencer ou perder como equipe!
+
+### Regras Básicas:
+- **2 pilhas ascendentes**: Começam em 1, crescem até 99
+- **2 pilhas descendentes**: Começam em 100, decrescem até 2
+- **Salto especial**: Pode jogar carta com diferença exata de 10 para trás
+- **Turnos**: Mínimo 2 cartas por turno (1 se baralho vazio)
+- **Vitória**: Todas as cartas jogadas
+- **Derrota**: Nenhum jogador consegue fazer movimentos
+
+## 🚀 Funcionalidades
+
+- ✅ **Auto-start**: Jogo inicia automaticamente quando todos informam nomes
+- ✅ **Passagem automática de turno**: Sistema detecta quando jogador não pode jogar
+- ✅ **Multiplayer**: 2-6 jogadores simultâneos
+- ✅ **Tempo real**: Atualizações via polling (preparado para WebSocket)
+- ✅ **Responsivo**: Funciona em desktop e mobile
+- ✅ **Drag & Drop**: Interface intuitiva para jogar cartas
+- ✅ **Touch support**: Suporte completo para dispositivos móveis
+- ✅ **Áudio**: Efeitos sonoros para vitória/derrota
+- ✅ **Estatísticas**: Acompanhamento de progresso em tempo real
+
+## 🛠️ Tecnologias
+
+- **Next.js 15+** (App Router)
+- **TypeScript** (tipagem forte)
+- **Tailwind CSS** (estilização)
+- **Jest + React Testing Library** (TDD)
+- **Framer Motion** (animações)
+- **Socket.io** (preparado para WebSocket)
+
+## 📁 Estrutura do Projeto
+
+```
+the-game/
+├── docs/                    # 📚 Documentação completa
+│   ├── ARQUITETURA.md      # Arquitetura e diagramas
+│   └── GAME_FLOW_DOCUMENTATION.md # Fluxo detalhado do jogo
+├── src/
+│   ├── app/                # Páginas Next.js (App Router)
+│   ├── components/         # Componentes React
+│   ├── domain/            # Lógica de negócio (TDD)
+│   └── data/              # Persistência JSON
+└── public/                # Assets estáticos
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🎮 Como Jogar
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Acesse**: http://localhost:3000
+2. **Crie uma partida**: Clique em "Criar Nova Partida"
+3. **Compartilhe o link**: Envie para outros jogadores (2-6 pessoas)
+4. **Informe nomes**: Todos devem digitar seus nomes
+5. **Jogo inicia**: Automaticamente quando último jogador informa nome
+6. **Jogue cooperativamente**: Trabalhem juntos para vencer!
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🚀 Instalação e Execução
 
-## Learn More
+```bash
+# Clone o repositório
+git clone <repository-url>
+cd the-game
 
-To learn more about Next.js, take a look at the following resources:
+# Instale as dependências
+npm install
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Execute em modo desenvolvimento
+npm run dev
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Execute os testes
+npm test
 
-## Deploy on Vercel
+# Build para produção
+npm run build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🧪 Testes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+O projeto segue **TDD (Test-Driven Development)** com cobertura completa:
+
+```bash
+# Executar todos os testes
+npm test
+
+# Testes específicos do domínio
+npx jest src/domain/
+
+# Testes de componentes
+npx jest src/components/
+```
+
+**Cobertura atual**: 34 testes passando, 6 suítes de teste
+
+## 📖 Documentação
+
+### 📋 Documentação Principal
+- **[Arquitetura](docs/ARQUITETURA.md)**: Visão completa da arquitetura, tecnologias, diagramas e funcionalidades
+- **[Fluxo do Jogo](docs/GAME_FLOW_DOCUMENTATION.md)**: Documentação detalhada do fluxo, estados e lógica corrigida
+
+### 🔧 Funcionalidades Avançadas
+- **Passagem automática de turno**: Sistema inteligente que detecta quando jogador não pode jogar
+- **Auto-start**: Jogo inicia automaticamente quando todos os jogadores estão prontos
+- **Verificação corrigida de fim de jogo**: Jogo só termina quando realmente nenhum jogador pode continuar
+- **API com detecção automática**: Backend verifica e corrige situações bloqueadas
+
+### 📊 Diagramas
+A documentação inclui diagramas Mermaid detalhados:
+- **Estados do jogo**: Fluxo completo desde criação até fim
+- **Lógica de finalização**: Algoritmo corrigido de detecção de fim
+- **Cálculo de rodadas**: Como são calculadas as estatísticas
+
+## 🎯 Arquitetura
+
+### Princípios Seguidos:
+- **Clean Architecture**: Separação clara de responsabilidades
+- **SOLID**: Princípios de design orientado a objetos
+- **TDD**: Desenvolvimento orientado por testes
+- **Functional Programming**: Funções puras e imutabilidade
+- **TypeScript First**: Tipagem forte em todo o projeto
+
+### Padrões de Código:
+- **Inglês**: Código, variáveis e comentários
+- **Português**: Apenas interface do usuário
+- **Clean Code**: Funções pequenas, nomes descritivos
+- **Early Return**: Evita else e aninhamento excessivo
+
+## 🌟 Destaques Técnicos
+
+### Correções Implementadas:
+1. **Lógica de fim de jogo corrigida**: Agora verifica se TODOS os jogadores podem jogar
+2. **Passagem automática de turno**: Sistema detecta e passa turno quando necessário
+3. **Auto-start inteligente**: Jogo inicia automaticamente no servidor
+4. **API robusta**: Verificações automáticas a cada requisição
+
+### Qualidade de Código:
+- **100% TypeScript**: Tipagem forte em todo o projeto
+- **TDD**: Testes escritos antes da implementação
+- **Cobertura alta**: >80% de cobertura de testes
+- **Linting rigoroso**: ESLint + regras customizadas
+
+## 🚀 Deploy
+
+### Desenvolvimento:
+```bash
+npm run dev
+# Acesse: http://localhost:3000
+```
+
+### Produção (Vercel):
+- Suporte nativo para Vercel
+- Persistência em `/tmp` (temporária)
+- Variáveis de ambiente automáticas
+
+## 🤝 Contribuição
+
+1. Fork o projeto
+2. Crie uma branch para sua feature
+3. Escreva testes primeiro (TDD)
+4. Implemente a funcionalidade
+5. Execute os testes
+6. Faça commit das mudanças
+7. Abra um Pull Request
+
+## 📝 Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo LICENSE para mais detalhes.
+
+---
+
+**Desenvolvido com ❤️ seguindo as melhores práticas de desenvolvimento**

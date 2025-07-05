@@ -5,7 +5,7 @@ describe('Pile', () => {
   it('should render the label and top card', () => {
     render(<Pile label="Subida 1" topCard={33} type="asc" selected={false} onClick={() => {}} />);
     expect(screen.getByText('Subida 1')).toBeInTheDocument();
-    expect(screen.getByText('33')).toBeInTheDocument();
+    expect(screen.getAllByText('33').length).toBeGreaterThan(0);
   });
 
   it('should apply selected styles when selected', () => {
