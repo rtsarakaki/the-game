@@ -11,8 +11,8 @@ describe('checkGameEnd', () => {
 
   it('should return victory if all hands and deck are empty', () => {
     const players: IPlayer[] = [
-      { name: 'A', cards: [] },
-      { name: 'B', cards: [] },
+      { id: 'A', name: 'A', cards: [] },
+      { id: 'B', name: 'B', cards: [] },
     ];
     const deck: number[] = [];
     const isMovePossible = jest.fn();
@@ -21,8 +21,8 @@ describe('checkGameEnd', () => {
 
   it('should return defeat if no moves are possible for any player', () => {
     const players: IPlayer[] = [
-      { name: 'A', cards: [10] },
-      { name: 'B', cards: [20] },
+      { id: 'A', name: 'A', cards: [10] },
+      { id: 'B', name: 'B', cards: [20] },
     ];
     const deck: number[] = [1, 2];
     const isMovePossible = jest.fn().mockReturnValue(false);
@@ -31,8 +31,8 @@ describe('checkGameEnd', () => {
 
   it('should return in_progress if there are still moves possible', () => {
     const players: IPlayer[] = [
-      { name: 'A', cards: [10] },
-      { name: 'B', cards: [20] },
+      { id: 'A', name: 'A', cards: [10] },
+      { id: 'B', name: 'B', cards: [20] },
     ];
     const deck: number[] = [1, 2];
     const isMovePossible = jest.fn().mockReturnValue(true);
@@ -41,14 +41,14 @@ describe('checkGameEnd', () => {
 
   it('should return in_progress when current player cannot meet minimum but other players can play', () => {
     const players: IPlayer[] = [
-      { name: 'A', cards: [50] }, // Current player - can't make 2 moves
-      { name: 'B', cards: [2, 3] }, // Other player - can make moves
+      { id: 'A', name: 'A', cards: [50] }, // Current player - can't make 2 moves
+      { id: 'B', name: 'B', cards: [2, 3] }, // Other player - can make moves
     ];
     const deck: number[] = [1, 2];
     
     // Mock: A can't play, B can play
     const isMovePossible = jest.fn()
-      .mockImplementation((player: IPlayer) => player.name === 'B');
+      .mockImplementation((player: IPlayer) => player.id === 'B');
     
     const result = checkGameEnd(deck, players, piles, isMovePossible, 0, 2);
     expect(result).toBe('in_progress');
@@ -56,8 +56,8 @@ describe('checkGameEnd', () => {
 
   it('should return defeat when current player cannot meet minimum and no other players can play', () => {
     const players: IPlayer[] = [
-      { name: 'A', cards: [50] }, // Current player - can't make 2 moves
-      { name: 'B', cards: [60] }, // Other player - also can't play
+      { id: 'A', name: 'A', cards: [50] }, // Current player - can't make 2 moves
+      { id: 'B', name: 'B', cards: [60] }, // Other player - also can't play
     ];
     const deck: number[] = [1, 2];
     
@@ -70,14 +70,14 @@ describe('checkGameEnd', () => {
 
   it('should return in_progress when current player can meet minimum requirements', () => {
     const players: IPlayer[] = [
-      { name: 'A', cards: [2, 3] }, // Current player - can make 2 moves
-      { name: 'B', cards: [60] }, // Other player - doesn't matter
+      { id: 'A', name: 'A', cards: [2, 3] }, // Current player - can make 2 moves
+      { id: 'B', name: 'B', cards: [60] }, // Other player - doesn't matter
     ];
     const deck: number[] = [1, 2];
     
     // Mock: A can play (has valid moves)
     const isMovePossible = jest.fn()
-      .mockImplementation((player: IPlayer) => player.name === 'A');
+      .mockImplementation((player: IPlayer) => player.id === 'A');
     
     const result = checkGameEnd(deck, players, piles, isMovePossible, 0, 2);
     expect(result).toBe('in_progress');
@@ -86,8 +86,8 @@ describe('checkGameEnd', () => {
   it('should handle scenario where current player has cards but no moves, other player can play', () => {
     // Simulating the real scenario from partida.json
     const players: IPlayer[] = [
-      { name: 'Ricardo', cards: [25, 36, 65, 7, 95, 76] }, // Can play 25, 7 on DESC2
-      { name: 'Leonardo', cards: [58] }, // Cannot play 58 anywhere
+      { id: 'Ricardo', name: 'Ricardo', cards: [25, 36, 65, 7, 95, 76] }, // Can play 25, 7 on DESC2
+      { id: 'Leonardo', name: 'Leonardo', cards: [58] }, // Cannot play 58 anywhere
     ];
     const deck: number[] = [53, 61, 5]; // Not empty
     
@@ -100,7 +100,7 @@ describe('checkGameEnd', () => {
     
     // Mock based on real scenario: Ricardo can play, Leonardo cannot
     const isMovePossible = jest.fn()
-      .mockImplementation((player: IPlayer) => player.name === 'Ricardo');
+      .mockImplementation((player: IPlayer) => player.id === 'Ricardo');
     
     // Leonardo is current player (index 1), needs minimum 2 cards
     const result = checkGameEnd(deck, players, pilesReal, isMovePossible, 1, 2);

@@ -44,7 +44,7 @@ export const nextPlayerWhoCanPlay = (
     if (!player) break;
     
     // Check if this player can make moves
-    const playerForCheck: IPlayer = { name: player.name, cards: player.cards };
+    const playerForCheck: IPlayer = { id: player.id, name: player.name, cards: player.cards };
     if (isMovePossible(playerForCheck, piles)) {
       return nextId;
     }

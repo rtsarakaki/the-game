@@ -1,6 +1,5 @@
 import React from "react";
 import Card from "@/components/Card";
-import type { IPlayer } from '@/domain/types';
 
 export type PilesType = {
   asc1: number[];

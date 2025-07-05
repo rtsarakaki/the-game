@@ -17,15 +17,18 @@ export const dealCards = (
   playerNames: string[],
   cardsPerPlayer: number
 ): DealCardsResult => {
-  const { players, deckLeft } = playerNames.reduce(
+  const { players, deckLeft } = playerNames.reduce<{
+    players: IPlayer[];
+    deckLeft: number[];
+  }>(
     (acc, name) => {
       const cards = acc.deckLeft.slice(0, cardsPerPlayer);
       return {
-        players: [...acc.players, { name, cards }],
+        players: [...acc.players, { id: '', name, cards }],
         deckLeft: acc.deckLeft.slice(cardsPerPlayer),
       };
     },
-    { players: [] as IPlayer[], deckLeft: [...deck] }
+    { players: [], deckLeft: [...deck] }
   );
   return { deck: deckLeft, players };
 }; 
