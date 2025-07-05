@@ -4,35 +4,7 @@ import path from 'path';
 import { shuffleDeck } from '@/domain/shuffleDeck';
 import { dealCards } from '@/domain/dealCards';
 import { isValidMove } from '@/domain/isValidMove';
-
-interface Player {
-  id: string;
-  name: string;
-  cartas: number[];
-}
-
-interface Partida {
-  id: string;
-  timestamp: number;
-  jogadores: Player[];
-  pilhas: {
-    asc1: number[];
-    asc2: number[];
-    desc1: number[];
-    desc2: number[];
-  };
-  baralho: number[];
-  ordemJogadores: string[];
-  jogadorAtual: string;
-  status: string;
-  autoStarted?: boolean;
-  jogadasTurnoAtual?: number;
-  rodadasCompletas?: number;
-}
-
-interface GameStorage {
-  [gameId: string]: Partida;
-}
+import type { IGame, IPlayer } from '@/domain/types';
 
 const isVercel = !!process.env.VERCEL;
 const GAMES_PATH = isVercel
@@ -42,27 +14,24 @@ const GAMES_PATH = isVercel
 const TTL_24_HOURS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 // Function to clean expired games
-const cleanExpiredGames = async (): Promise<GameStorage> => {
+const cleanExpiredGames = async (): Promise<Record<string, IGame>> => {
   try {
     const data = await fs.readFile(GAMES_PATH, 'utf-8');
-    const games: GameStorage = JSON.parse(data);
+    const games: Record<string, IGame> = JSON.parse(data);
     const now = Date.now();
-    const cleanedGames: GameStorage = {};
-    
+    const cleanedGames: Record<string, IGame> = {};
     let removedCount = 0;
     for (const [gameId, game] of Object.entries(games)) {
-      if (now - game.timestamp < TTL_24_HOURS) {
+      if (now - (game.timestamp ?? 0) < TTL_24_HOURS) {
         cleanedGames[gameId] = game;
       } else {
         removedCount++;
       }
     }
-    
     if (removedCount > 0) {
       console.log(`🧹 Cleaned ${removedCount} expired games`);
       await fs.writeFile(GAMES_PATH, JSON.stringify(cleanedGames, null, 2));
     }
-    
     return cleanedGames;
   } catch {
     // If file doesn't exist, return empty object
@@ -72,20 +41,20 @@ const cleanExpiredGames = async (): Promise<GameStorage> => {
 };
 
 // Function to get a specific game
-const getGame = async (gameId: string): Promise<Partida | null> => {
+const getGame = async (gameId: string): Promise<IGame | null> => {
   const games = await cleanExpiredGames();
   return games[gameId] || null;
 };
 
 // Function to save a game
-const saveGame = async (gameId: string, partida: Partida): Promise<void> => {
+const saveGame = async (gameId: string, game: IGame): Promise<void> => {
   const games = await cleanExpiredGames();
-  games[gameId] = partida;
+  games[gameId] = game;
   await fs.writeFile(GAMES_PATH, JSON.stringify(games, null, 2));
 };
 
 // Function to notify clients via WebSocket
-const notifyClients = async (eventType: string, data: Partida): Promise<void> => {
+const notifyClients = async (eventType: string, data: IGame): Promise<void> => {
   try {
     // In a real implementation, you would send this to your WebSocket server
     // For now, we'll just log it and rely on client-side polling
@@ -96,72 +65,123 @@ const notifyClients = async (eventType: string, data: Partida): Promise<void> =>
 };
 
 // Function to check if game should auto-start
-const checkAndAutoStart = async (gameId: string, partida: Partida): Promise<Partida> => {
-  const allNamesProvided = partida.jogadores.length >= 2 && 
-    partida.jogadores.every((j: Player) => j.name && j.name.trim().length > 0);
-  
-  if (allNamesProvided && partida.status === "esperando_jogadores") {
+const checkAndAutoStart = async (gameId: string, game: IGame): Promise<IGame> => {
+  const allNamesProvided = game.players.length >= 2 && 
+    game.players.every((player: IPlayer) => player.name && player.name.trim().length > 0);
+  if (allNamesProvided && game.status === "waiting_players") {
     // Auto-start the game
     const shuffled = shuffleDeck(Array.from({ length: 98 }, (_, i) => i + 2));
-    const { players, deck } = dealCards(shuffled, partida.jogadores.map((j: Player) => j.name), 6);
-    
-    const updatedPartida: Partida = {
-      ...partida,
-      jogadores: players.map((p) => ({ 
+    const { players, deck } = dealCards(shuffled, game.players.map((player: IPlayer) => player.name), 6);
+    const updatedGame: IGame = {
+      ...game,
+      players: players.map((p) => ({ 
         name: p.name, 
-        cartas: p.cards, 
-        id: partida.jogadores.find((j: Player) => j.name === p.name)?.id || "" 
+        cards: p.cards, 
+        id: game.players.find((player: IPlayer) => player.name === p.name)?.id || "" 
       })),
-      baralho: deck,
-      ordemJogadores: partida.jogadores.map((j: Player) => j.id),
-      jogadorAtual: partida.jogadores[0].id,
-      status: "em_andamento",
+      deck,
+      playerOrder: game.players.map((player: IPlayer) => player.id),
+      currentPlayer: game.players[0].id,
+      status: "in_progress",
       autoStarted: true, // Flag to indicate auto-start
     };
-    
-    // Save the updated partida
-    await saveGame(gameId, updatedPartida);
-    
+    // Save the updated game
+    await saveGame(gameId, updatedGame);
     // Notify all clients that the game has started
-    await notifyClients('game:started', updatedPartida);
-    
-    return updatedPartida;
+    await notifyClients('game:started', updatedGame);
+    return updatedGame;
   }
-  
-  return partida;
+  return game;
 };
 
-// Função para repor cartas apenas para o jogador que acabou de jogar
-const replenishCardsForPreviousPlayer = (partida: Partida, previousPlayerId: string): Partida => {
-  if (partida.status !== "em_andamento") {
-    return partida;
+// Function to replenish cards for the previous player
+const replenishCardsForPreviousPlayer = (game: IGame, previousPlayerId: string): IGame => {
+  if (game.status !== "in_progress") {
+    return game;
   }
-  let newBaralho = [...partida.baralho];
-  const newPlayers = partida.jogadores.map(player => {
+  let newDeck = [...game.deck];
+  const newPlayers = game.players.map(player => {
     if (player.id !== previousPlayerId) return player;
-    const newHand = [...player.cartas];
-    while (newBaralho.length > 0 && newHand.length < 6) {
-      newHand.push(newBaralho[0]);
-      newBaralho = newBaralho.slice(1);
+    const newHand = [...player.cards];
+    while (newDeck.length > 0 && newHand.length < 6) {
+      newHand.push(newDeck[0]);
+      newDeck = newDeck.slice(1);
     }
-    return { ...player, cartas: newHand };
+    return { ...player, cards: newHand };
   });
   return {
-    ...partida,
-    jogadores: newPlayers,
-    baralho: newBaralho
+    ...game,
+    players: newPlayers,
+    deck: newDeck
   };
 };
 
-// Função utilitária para mapear cartas -> cards
-function mapPartidaToFrontend(partida: Partida) {
+// Utility function to map backend to frontend (if needed)
+function mapGameToFrontend(game: IGame) {
   return {
-    ...partida,
-    jogadores: partida.jogadores.map((j: Player) => ({
-      ...j,
-      cards: j.cartas
+    ...game,
+    players: game.players.map((player: IPlayer) => ({
+      ...player,
+      cards: player.cards
     }))
   };
+}
+
+function validateMinCardsPlayed(
+  beforeCards: number[],
+  afterCards: number[],
+  minCardsPerTurn: number,
+  piles: Record<string, number[]>
+): { valid: boolean; debugInfo: { minCardsPerTurn: number; cardsPlayed: number; beforeCards: number[]; afterCards: number[]; canStillPlay: boolean } } {
+  const cardsPlayed = beforeCards.length - afterCards.length;
+  const canStillPlay = (afterCards ?? []).some((card: number) => {
+    return Object.entries(piles).some(([pileKey, pile]: [string, number[]]) => {
+      const pileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
+      const topCard = pile[pile.length - 1];
+      return isValidMove(pileType, topCard, card);
+    });
+  });
+  const debugInfo = {
+    minCardsPerTurn,
+    cardsPlayed,
+    beforeCards,
+    afterCards,
+    canStillPlay
+  };
+  if (cardsPlayed < minCardsPerTurn && canStillPlay) {
+    console.log('[DEBUG][validateMinCardsPlayed] Failed:', debugInfo);
+    return { valid: false, debugInfo };
+  }
+  return { valid: true, debugInfo };
+}
+
+function passTurnToNextPlayer(game: IGame): IGame {
+  const currentIndex = game.playerOrder.indexOf(game.currentPlayer);
+  const nextIndex = (currentIndex + 1) % game.playerOrder.length;
+  const nextPlayerId = game.playerOrder[nextIndex];
+  let completedRounds = game.completedRounds || 0;
+  if (nextIndex === 0) completedRounds++;
+  return { ...game, currentPlayer: nextPlayerId, currentTurnPlays: 0, completedRounds };
+}
+
+function checkDefeatForNextPlayer(game: IGame): IGame {
+  const nextPlayer = game.players.find((player: IPlayer) => player.id === game.currentPlayer);
+  const canNextPlay = (nextPlayer?.cards ?? []).some((card: number) => {
+    return Object.entries(game.piles).some(([pileKey, pile]: [string, number[]]) => {
+      const pileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
+      const topCard = pile[pile.length - 1];
+      return isValidMove(pileType, topCard, card);
+    });
+  });
+  if (!canNextPlay) {
+    return { ...game, status: 'defeat' };
+  }
+  return game;
+}
+
+async function saveAndNotify(gameId: string, game: IGame): Promise<void> {
+  await saveGame(gameId, game);
+  await notifyClients('game:updated', game);
 }
 
 export async function GET(req: NextRequest) {
@@ -172,12 +192,12 @@ export async function GET(req: NextRequest) {
     if (!gameId) {
       return NextResponse.json({ error: 'Game ID is required' }, { status: 400 });
     }
-    let partida = await getGame(gameId);
-    if (!partida) {
+    let game = await getGame(gameId);
+    if (!game) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
     }
-    partida = await checkAndAutoStart(gameId, partida);
-    return NextResponse.json(mapPartidaToFrontend(partida));
+    game = await checkAndAutoStart(gameId, game);
+    return NextResponse.json(mapGameToFrontend(game));
   } catch (error) {
     console.error('Error in GET:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -188,17 +208,13 @@ export async function POST(req: NextRequest) {
   try {
     // Clean expired games first
     await cleanExpiredGames();
-    
     const body = await req.json();
-    const { gameId, partida } = body;
-    
-    if (!gameId || !partida) {
-      return NextResponse.json({ error: 'Game ID and partida are required' }, { status: 400 });
+    const { gameId, game } = body;
+    if (!gameId || !game) {
+      return NextResponse.json({ error: 'Game ID and game are required' }, { status: 400 });
     }
-    
-    await saveGame(gameId, partida);
+    await saveGame(gameId, game);
     console.log(`🎮 Created new game: ${gameId}`);
-    
     return NextResponse.json({ ok: true, gameId });
   } catch (error) {
     console.error('Error in POST:', error);
@@ -209,70 +225,40 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { gameId, partida, endTurn } = body;
-    if (!gameId || !partida) {
-      return NextResponse.json({ error: 'Game ID and partida are required' }, { status: 400 });
+    const { gameId, game, endTurn } = body;
+    if (!gameId || !game) {
+      return NextResponse.json({ error: 'Game ID and game are required' }, { status: 400 });
     }
-    let updatedPartida = await checkAndAutoStart(gameId, partida);
-    // Inicializa campos se não existirem
-    if (typeof updatedPartida.jogadasTurnoAtual !== 'number') updatedPartida.jogadasTurnoAtual = 0;
-    if (typeof updatedPartida.rodadasCompletas !== 'number') updatedPartida.rodadasCompletas = 0;
-    // Se for um PUT de finalizar turno (endTurn === true)
+    // Log before saving
+    const before = (await getGame(gameId))?.players.map(player => ({ id: player.id, cards: player.cards }));
+    console.log('[DEBUG][PUT] Before saving:', before);
+    let updatedGame = await checkAndAutoStart(gameId, game);
+    if (typeof updatedGame.currentTurnPlays !== 'number') updatedGame.currentTurnPlays = 0;
+    if (typeof updatedGame.completedRounds !== 'number') updatedGame.completedRounds = 0;
     if (endTurn) {
-      const currentPlayer = updatedPartida.jogadores.find((j: Player) => j.id === updatedPartida.jogadorAtual);
-      const minCardsPerTurn = updatedPartida.baralho.length === 0 ? 1 : 2;
-      const cardsPlayed = (partida.jogadores.find((j: Player) => j.id === updatedPartida.jogadorAtual)?.cartas.length ?? 0) - (currentPlayer?.cartas.length ?? 0);
-      // Se não jogou o mínimo obrigatório
-      if (cardsPlayed < minCardsPerTurn) {
-        // Verifica se ainda pode jogar mais alguma carta
-        const canStillPlay = (currentPlayer?.cartas ?? []).some((card: number) => {
-          return Object.entries(updatedPartida.pilhas).some(([pileKey, pile]) => {
-            const pileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
-            const topCard = pile[pile.length - 1];
-            return isValidMove(pileType, topCard, card);
-          });
-        });
-        if (canStillPlay) {
-          return NextResponse.json({ error: `Você deve jogar pelo menos ${minCardsPerTurn} carta(s) ou não pode jogar mais nenhuma.` }, { status: 400 });
-        } else {
-          // Derrota
-          updatedPartida = { ...updatedPartida, status: 'defeat' };
-        }
-      } else {
-        // Passa o turno normalmente
-        const idx = updatedPartida.ordemJogadores.indexOf(updatedPartida.jogadorAtual);
-        const nextIdx = (idx + 1) % updatedPartida.ordemJogadores.length;
-        const nextPlayerId = updatedPartida.ordemJogadores[nextIdx];
-        // Incrementa rodadasCompletas se voltou ao primeiro jogador
-        let rodadasCompletas = updatedPartida.rodadasCompletas || 0;
-        if (nextIdx === 0) rodadasCompletas++;
-        updatedPartida = { ...updatedPartida, jogadorAtual: nextPlayerId, jogadasTurnoAtual: 0, rodadasCompletas };
-        // Se o próximo não pode jogar nenhuma carta, derrota
-        const nextPlayer = updatedPartida.jogadores.find((j: Player) => j.id === nextPlayerId);
-        const canNextPlay = (nextPlayer?.cartas ?? []).some((card: number) => {
-          return Object.entries(updatedPartida.pilhas).some(([pileKey, pile]) => {
-            const pileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
-            const topCard = pile[pile.length - 1];
-            return isValidMove(pileType, topCard, card);
-          });
-        });
-        if (!canNextPlay) {
-          updatedPartida = { ...updatedPartida, status: 'defeat' };
-        }
+      const currentPlayer = updatedGame.players.find((player: IPlayer) => player.id === updatedGame.currentPlayer);
+      const minCardsPerTurn = updatedGame.deck.length === 0 ? 1 : 2;
+      const beforeCards = game.players.find((player: IPlayer) => player.id === updatedGame.currentPlayer)?.cards || [];
+      const afterCards = currentPlayer?.cards || [];
+      const validation = validateMinCardsPlayed(beforeCards, afterCards, minCardsPerTurn, updatedGame.piles as unknown as Record<string, number[]>);
+      if (!validation.valid) {
+        return NextResponse.json({ error: `You must play at least ${minCardsPerTurn} card(s) or not be able to play any more.`, debug: validation.debugInfo }, { status: 400 });
       }
-      // Repor cartas para o jogador que acabou de jogar
-      if (updatedPartida.status === 'em_andamento') {
-        updatedPartida = replenishCardsForPreviousPlayer(updatedPartida, partida.jogadorAtual);
+      updatedGame = passTurnToNextPlayer(updatedGame);
+      updatedGame = checkDefeatForNextPlayer(updatedGame);
+      if (updatedGame.status === 'in_progress') {
+        updatedGame = replenishCardsForPreviousPlayer(updatedGame, game.currentPlayer);
       }
     } else {
-      // Jogada de carta: incrementa jogadasTurnoAtual
-      updatedPartida.jogadasTurnoAtual = (updatedPartida.jogadasTurnoAtual || 0) + 1;
+      updatedGame.currentTurnPlays = (updatedGame.currentTurnPlays || 0) + 1;
     }
-    await saveGame(gameId, updatedPartida);
-    await notifyClients('partida:updated', updatedPartida);
-    return NextResponse.json({ ok: true, data: mapPartidaToFrontend(updatedPartida) });
+    // Log after saving
+    const after = updatedGame.players.map(player => ({ id: player.id, cards: player.cards }));
+    console.log('[DEBUG][PUT] After saving:', after);
+    await saveAndNotify(gameId, updatedGame);
+    return NextResponse.json({ ok: true, data: mapGameToFrontend(updatedGame) });
   } catch (error) {
     console.error('Error in PUT:', error);
-    return NextResponse.json({ error: 'Could not update game' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not update game', details: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, { status: 500 });
   }
 } 

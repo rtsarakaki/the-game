@@ -11,14 +11,16 @@ export interface Piles {
   desc2: number[];
 }
 
-export interface IPartida {
+export interface IGame {
   id: string;
-  jogadores: IPlayer[];
-  pilhas: Piles;
-  baralho: number[];
-  ordemJogadores: string[];
-  jogadorAtual: string;
+  players: IPlayer[];
+  piles: Piles;
+  deck: number[];
+  playerOrder: string[];
+  currentPlayer: string;
   status: string;
   autoStarted: boolean;
   timestamp?: number;
+  completedRounds?: number;
+  currentTurnPlays?: number;
 } 

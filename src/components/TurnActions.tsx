@@ -3,7 +3,7 @@ import React from "react";
 interface TurnActionsProps {
   isMyTurn: boolean;
   onEndTurn: () => void;
-  endTurnError: string | null;
+  endTurnError?: React.ReactNode | null;
 }
 
 const TurnActions: React.FC<TurnActionsProps> = ({ isMyTurn, onEndTurn, endTurnError }) => (

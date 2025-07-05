@@ -16,7 +16,7 @@ describe('Pile', () => {
   it('should call onClick when clicked', () => {
     const onClick = jest.fn();
     render(<Pile label="Subida 2" topCard={10} type="asc" selected={false} onClick={onClick} />);
-    fireEvent.click(screen.getByText('Subida 2'));
+    fireEvent.click(screen.getByRole('button'));
     expect(onClick).toHaveBeenCalled();
   });
 

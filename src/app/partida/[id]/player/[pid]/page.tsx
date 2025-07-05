@@ -1,6 +1,7 @@
 "use client";
-import { use, useState, useEffect } from "react";
+import React, { use, useState, useEffect } from "react";
 import { isValidMove, PileType } from '@/domain/isValidMove';
+import { isMovePossible } from '@/domain/isMovePossible';
 import GameEndOverlay from '@/components/GameEndOverlay';
 import PlayerNameForm from '@/components/PlayerNameForm';
 import Hand, { PilesType } from '@/components/Hand';
@@ -8,15 +9,34 @@ import Piles from '@/components/Piles';
 import GameRules from '@/components/GameRules';
 import TurnActions from '@/components/TurnActions';
 import GameStatsPanel from '@/components/GameStatsPanel';
-import { usePartidaSocket } from '@/hooks/usePartidaSocket';
+import { useGameSocket } from '@/hooks/useGameSocket';
+import { useGamePolling } from '@/hooks/useGamePolling';
 import { useAudioFeedback } from '@/hooks/useAudioFeedback';
 import { useIsTouchDevice } from '@/hooks/useIsTouchDevice';
-import { fetchPartida, updatePartida, replenishHand } from '@/services/partidaService';
-import type { IPartida, IPlayer } from '@/domain/types';
+import { fetchGame, updateGame } from '@/services/gameService';
+import { playCard } from '@/services/playCardService';
+import type { IGame, IPlayer } from '@/domain/types';
+import AppFooter from '@/components/AppFooter';
+import SectionCard from '@/components/SectionCard';
+
+type BackendError = Error & {
+  debug?: unknown;
+  stack?: string;
+};
+
+// Utility to replenish hand locally
+function getReplenishedHand(player: IPlayer, deck: number[], maxHand = 6): { newHand: number[]; newDeck: number[] } {
+  const newHand = [...player.cards];
+  const newDeck = [...deck];
+  while (newHand.length < maxHand && newDeck.length > 0) {
+    newHand.push(newDeck.shift()!);
+  }
+  return { newHand, newDeck };
+}
 
 export default function PlayerHandPage({ params }: { params: Promise<{ id: string; pid: string }> }) {
   const { id, pid } = use(params);
-  const [partida, setPartida] = useState<IPartida | null>(null);
+  const [game, setGame] = useState<IGame | null>(null);
   const [player, setPlayer] = useState<IPlayer | null>(null);
   const [nomeInput, setNomeInput] = useState("");
   const [nomeLoading, setNomeLoading] = useState(false);
@@ -25,32 +45,34 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [playedThisTurn, setPlayedThisTurn] = useState<number[]>([]);
-  const [endTurnError, setEndTurnError] = useState<string | null>(null);
+  const [endTurnError, setEndTurnError] = useState<React.ReactNode | null>(null);
   const [lastDrop, setLastDrop] = useState<string | null>(null);
   const [errorDrop, setErrorDrop] = useState<string | null>(null);
   const [gameStartNotification, setGameStartNotification] = useState(false);
+  const [turnPlays, setTurnPlays] = useState(0);
 
-  const isMyTurn = (partida?.status === "em_andamento" || partida?.status === "in_progress") && partida?.jogadorAtual === pid;
+  const isMyTurn = (game?.status === "em_andamento" || game?.status === "in_progress") && game?.currentPlayer === pid;
   const isTouchDevice = useIsTouchDevice();
-  usePartidaSocket({ id, pid, setPartida, setPlayer, setGameStartNotification });
-  useAudioFeedback(partida?.status);
+  useGameSocket({ id, playerId: pid, setGame, setPlayer, setGameStartNotification });
+  useGamePolling({ id, playerId: pid, setGame, setPlayer });
+  useAudioFeedback(game?.status);
 
   // Sempre sincroniza o player com a partida e pid
   useEffect(() => {
-    if (!partida || !pid) return;
-    const foundPlayer = partida.jogadores.find((j: IPlayer) => j.id === pid) || null;
+    if (!game || !pid) return;
+    const foundPlayer = game.players.find((j: IPlayer) => j.id === pid) || null;
     setPlayer(foundPlayer);
-  }, [partida, pid]);
+  }, [game, pid]);
 
   // Debug: logar partida, pid, player e player.name
   useEffect(() => {
-    console.log('[DEBUG] partida:', partida);
+    console.log('[DEBUG] game:', game);
     console.log('[DEBUG] pid:', pid);
     console.log('[DEBUG] player:', player);
     if (player) {
       console.log('[DEBUG] player.name:', player.name);
     }
-  }, [partida, pid, player]);
+  }, [game, pid, player]);
 
   // Fetch inicial da partida
   useEffect(() => {
@@ -61,7 +83,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
         return res.json();
       })
       .then(data => {
-        setPartida(data);
+        setGame(data);
       });
   }, [id]);
 
@@ -75,7 +97,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
           return res.json();
         })
         .then(data => {
-          setPartida(prev => {
+          setGame(prev => {
             // Só atualiza se mudou
             if (JSON.stringify(prev) !== JSON.stringify(data)) {
               return data;
@@ -88,6 +110,13 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
     return () => clearInterval(interval);
   }, [id]);
 
+  // Sincroniza jogadasTurnoAtual do backend com o estado local
+  useEffect(() => {
+    if (game && typeof game.currentTurnPlays === 'number') {
+      setTurnPlays(game.currentTurnPlays);
+    }
+  }, [game]);
+
   // Handlers
   const handleSaveName = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,14 +128,14 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
       setNomeLoading(false);
       return;
     }
-    if (partida?.jogadores.some(j => j && j.name && j.name.toLowerCase() === name.toLowerCase())) {
+    if (game?.players.some(j => j && j.name && j.name.toLowerCase() === name.toLowerCase())) {
       setNomeError("Este nome já está em uso por outro jogador.");
       setNomeLoading(false);
       return;
     }
     const updated = {
-      ...partida!,
-      jogadores: partida!.jogadores.map(j =>
+      ...game!,
+      players: game!.players.map(j =>
         j.id === player!.id ? { ...j, name } : j
       ),
     };
@@ -117,9 +146,9 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
         body: JSON.stringify({ gameId: id, partida: updated }),
       });
       if (!res.ok) throw new Error();
-      const data = await fetchPartida(id);
-      setPartida(data);
-      const updatedPlayer = data.jogadores.find((j: IPlayer) => j.id === player!.id);
+      const data = await fetchGame(id);
+      setGame(data);
+      const updatedPlayer = data.players.find((j: IPlayer) => j.id === player!.id);
       if (updatedPlayer) setPlayer(updatedPlayer);
       setNomeInput("");
     } catch {
@@ -130,51 +159,30 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
   };
 
   const handlePlayCard = async (card: number, pileKey: keyof PilesType) => {
-    if (!isMyTurn || !partida || !player) return;
-    const pileType: PileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
-    const topCard = partida.pilhas[pileKey][partida.pilhas[pileKey].length - 1];
-    if (!isValidMove(pileType, topCard, card)) {
-      setEndTurnError('Jogada inválida para esta pilha!');
-      const audio = new Audio('/sounds/error.mp3');
-      audio.play();
-      setDraggedCard(null);
-      setDropTarget(null);
+    const result = await playCard({
+      isMyTurn,
+      game,
+      player,
+      card,
+      pileKey,
+      playerId: pid,
+      fetchGame,
+      isValidMove,
+      id,
+    });
+    if (result.error) {
+      setEndTurnError(result.error === 'Invalid move for this pile!' ? 'Jogada inválida para esta pilha!' : result.error);
+      if (result.error === 'Invalid move for this pile!') {
+        const audio = new Audio('/sounds/error.mp3');
+        audio.play();
+        setDraggedCard(null);
+        setDropTarget(null);
+      }
       return;
     }
     setEndTurnError(null);
-    const updatedPlayers = partida.jogadores.map((j) =>
-      j.id === player.id
-        ? { ...j, cards: j.cards.filter((c) => c !== card), cartas: j.cards.filter((c) => c !== card) }
-        : j
-    );
-    const updatedPiles = {
-      ...partida.pilhas,
-      [pileKey]: [...partida.pilhas[pileKey], card],
-    };
-    const remainingCards = updatedPlayers.find(j => j.id === player.id)?.cards || [];
-    const canStillPlay = remainingCards.some(card => {
-      return Object.entries(updatedPiles).some(([pileKey, pile]) => {
-        const pileType: PileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
-        const topCard = pile[pile.length - 1];
-        return isValidMove(pileType, topCard, card);
-      });
-    });
-    let updated = {
-      ...partida,
-      jogadores: updatedPlayers,
-      pilhas: updatedPiles,
-    };
-    if (!canStillPlay && remainingCards.length > 0) {
-      updated = { ...updated, status: 'defeat' };
-    }
-    await fetch("/api/partida", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ gameId: id, partida: updated }),
-    });
-    const data = await fetchPartida(id);
-    setPartida(data);
-    setPlayer(data.jogadores.find((j: IPlayer) => j.id === pid) || null);
+    if (result.updatedGame) setGame(result.updatedGame);
+    if (result.updatedPlayer) setPlayer(result.updatedPlayer);
     setPlayedThisTurn((prev) => [...prev, card]);
     setDraggedCard(null);
     setDropTarget(null);
@@ -183,50 +191,83 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
   };
 
   const handleEndTurn = async () => {
-    if (!isMyTurn || !partida || !player) return;
-    const minPlays = partida.baralho.length === 0 ? 1 : 2;
-    if (playedThisTurn.length < minPlays) {
-      setEndTurnError(`Você deve jogar pelo menos ${minPlays} carta${minPlays > 1 ? 's' : ''} neste turno.`);
+    if (!isMyTurn || !game || !player) return;
+    const minPlays = game.deck.length === 0 ? 1 : 2;
+    const canStillPlay = isMovePossible(player, game.piles);
+    if (playedThisTurn.length < minPlays && canStillPlay) {
+      setEndTurnError(`You must play at least ${minPlays} card(s) or have no possible moves.`);
       return;
     }
     setEndTurnError(null);
-    // Repor cartas do jogador antes de passar a vez
-    const { newHand, newDeck } = replenishHand(player, partida.baralho);
-    const updatedPlayers = partida.jogadores.map(j =>
-      j.id === player.id ? { ...j, cartas: newHand } : j
+    // Fetch the latest game state before ending the turn
+    const latestGame = await fetchGame(id);
+    // Use the local player's state to ensure correct cards
+    const updatedPlayers = latestGame.players.map(currentPlayer =>
+      currentPlayer.id === player.id ? { ...currentPlayer, cards: player.cards } : currentPlayer
     );
-    const idx = partida.ordemJogadores.indexOf(player.id);
-    const nextIdx = (idx + 1) % partida.ordemJogadores.length;
-    const nextPlayerId = partida.ordemJogadores[nextIdx];
+    // Replenish player's hand before passing the turn
+    const { newHand, newDeck } = getReplenishedHand({ ...player, cards: player.cards }, latestGame.deck);
+    const finalPlayers = updatedPlayers.map(currentPlayer =>
+      currentPlayer.id === player.id ? { ...currentPlayer, cards: newHand } : currentPlayer
+    );
+    const idx = latestGame.playerOrder.indexOf(player.id);
+    const nextIdx = (idx + 1) % latestGame.playerOrder.length;
+    const nextPlayerId = latestGame.playerOrder[nextIdx];
     const updated = {
-      ...partida,
-      jogadores: updatedPlayers,
-      baralho: newDeck,
-      jogadorAtual: nextPlayerId,
+      ...latestGame,
+      players: finalPlayers,
+      deck: newDeck,
+      currentPlayer: nextPlayerId,
     };
-    await updatePartida(id, updated, true);
-    const data = await fetchPartida(id);
-    setPartida(data);
-    setPlayer(data.jogadores.find((j: IPlayer) => j.id === pid) || null);
-    setPlayedThisTurn([]);
+    try {
+      await updateGame(id, updated);
+      // Always fetch the updated game state from the backend after ending the turn
+      const data = await fetchGame(id);
+      setGame(data);
+      setPlayer(data.players.find((currentPlayer: IPlayer) => currentPlayer.id === pid) || null);
+      setPlayedThisTurn([]);
+    } catch (err: unknown) {
+      function isBackendError(e: unknown): e is BackendError {
+        return typeof e === 'object' && e !== null && 'message' in e;
+      }
+      if (isBackendError(err)) {
+        setEndTurnError(
+          <>
+            <div>{String(err.message)}</div>
+            {err.debug ? (
+              <pre style={{ fontSize: 10, color: 'gray', background: '#f8f8f8', padding: 8 }}>
+                {JSON.stringify(err.debug, null, 2)}
+              </pre>
+            ) : null}
+            {err.stack ? (
+              <pre style={{ fontSize: 10, color: 'red', background: '#fff0f0', padding: 8 }}>
+                {String(err.stack)}
+              </pre>
+            ) : null}
+          </>
+        );
+      } else {
+        setEndTurnError('Erro desconhecido ao encerrar turno.');
+      }
+    }
   };
 
   const canDropCard = (card: number, pileKey: keyof PilesType) => {
     const pileType: PileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
-    const topCard = partida!.pilhas[pileKey][partida!.pilhas[pileKey].length - 1];
+    const topCard = game!.piles[pileKey][game!.piles[pileKey].length - 1];
     return isValidMove(pileType, topCard, card);
   };
 
   const calculateCompletedRounds = () => {
-    if (!partida || partida.status !== "em_andamento") return 0;
-    if (typeof partida.rodadasCompletas === 'number') return partida.rodadasCompletas;
+    if (!game || game.status !== "em_andamento") return 0;
+    if (typeof game.completedRounds === 'number') return game.completedRounds;
     // fallback legacy calculation
-    const totalPlayers = partida.ordemJogadores.length;
-    const currentPlayerIndex = partida.ordemJogadores.indexOf(partida.jogadorAtual);
+    const totalPlayers = game.playerOrder.length;
+    const currentPlayerIndex = game.playerOrder.indexOf(game.currentPlayer);
     const initialCards = totalPlayers * 6;
-    const currentCards = partida.jogadores.reduce((acc, p) => acc + (p && p.cards ? p.cards.length : 0), 0);
+    const currentCards = game.players.reduce((acc, currentPlayer) => acc + (currentPlayer && currentPlayer.cards ? currentPlayer.cards.length : 0), 0);
     const cardsPlayed = initialCards - currentCards;
-    const averageCardsPerTurn = partida.baralho.length === 0 ? 1.5 : 2.2;
+    const averageCardsPerTurn = game.deck.length === 0 ? 1.5 : 2.2;
     const estimatedTurns = Math.floor(cardsPlayed / averageCardsPerTurn);
     let completedRounds = Math.floor(estimatedTurns / totalPlayers);
     if (currentPlayerIndex === 0 && estimatedTurns > 0) {
@@ -235,7 +276,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
     return Math.max(0, completedRounds);
   };
 
-  if (!partida) {
+  if (!game) {
     console.log('[DEBUG] Render: Partida não encontrada');
     return <div className="flex items-center justify-center min-h-screen text-red-500">Partida não encontrada.</div>;
   }
@@ -263,7 +304,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
         <aside className="lg:w-1/3 w-full mb-4 lg:mb-0">
           <GameRules variant="desktop" />
         </aside>
-        <div className="bg-white/90 rounded-lg shadow p-6 w-full lg:w-2/3 flex flex-col gap-6">
+        <SectionCard className="bg-white/90 w-full lg:w-2/3 flex flex-col gap-6 p-6">
           <section>
             <h2 className="text-lg font-semibold mb-2 text-gray-800">Suas cartas</h2>
             <Hand
@@ -280,7 +321,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
           <section>
             <h2 className="text-lg font-semibold mb-2 text-gray-800">Pilhas (topo)</h2>
             <Piles
-              pilhas={partida.pilhas}
+              pilhas={game.piles}
               isMyTurn={isMyTurn}
               isTouchDevice={isTouchDevice}
               draggedCard={draggedCard}
@@ -297,30 +338,33 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
           </section>
           <div className="flex flex-col-reverse gap-4 lg:flex-col">
             <GameStatsPanel
-              totalCardsPlayed={98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + (p && p.cards ? p.cards.length : 0), 0))}
-              cardsLeft={partida.baralho.length}
-              playersLeft={partida.jogadores.filter(p => p && p.cards && p.cards.length > 0).length}
+              totalCardsPlayed={98 - (game.deck.length + game.players.reduce((acc, p) => acc + (p && p.cards ? p.cards.length : 0), 0))}
+              cardsLeft={game.deck.length}
+              playersLeft={game.players.filter(p => p && p.cards && p.cards.length > 0).length}
               rounds={calculateCompletedRounds()}
             />
-            <TurnActions
-              isMyTurn={isMyTurn}
-              onEndTurn={handleEndTurn}
-              endTurnError={endTurnError}
-            />
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500 mb-1">Jogadas neste turno: <span className="font-semibold">{turnPlays}</span></span>
+              <TurnActions
+                isMyTurn={isMyTurn}
+                onEndTurn={handleEndTurn}
+                endTurnError={endTurnError}
+              />
+            </div>
           </div>
-        </div>
+        </SectionCard>
       </div>
       <div className="block lg:hidden w-full max-w-4xl mt-8">
         <GameRules variant="mobile" />
       </div>
       <GameEndOverlay
-        status={partida.status}
+        status={game.status}
         stats={{
-          totalCardsPlayed: 98 - (partida.baralho.length + partida.jogadores.reduce((acc, p) => acc + (p && p.cards ? p.cards.length : 0), 0)),
+          totalCardsPlayed: 98 - (game.deck.length + game.players.reduce((acc, p) => acc + (p && p.cards ? p.cards.length : 0), 0)),
           rounds: calculateCompletedRounds(),
         }}
       />
-      <footer className="mt-12 text-xs text-gray-400">Desenvolvido com Next.js, TypeScript e Tailwind CSS</footer>
+      <AppFooter />
       {gameStartNotification && (
         <div className="fixed bottom-20 left-0 w-full flex justify-center">
           <div className="bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">

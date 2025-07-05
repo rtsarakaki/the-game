@@ -6,52 +6,53 @@ import { CopyIcon, EmailIcon, WhatsAppIcon, CopyAllIcon, CheckIcon, OpenInNewTab
 import React from "react";
 import { shuffleDeck } from "@/domain/shuffleDeck";
 import { dealCards } from "@/domain/dealCards";
-import { usePartidaSocket } from '@/hooks/usePartidaSocket';
-import type { IPartida } from '@/domain/types';
+import { useGameSocket } from '@/hooks/useGameSocket';
+import type { IGame } from '@/domain/types';
+import PlayerLinksTip from '@/components/PlayerLinksTip';
 
 export default function GamePage() {
   const params = useParams();
   const router = useRouter();
   const gameId = params ? (Array.isArray(params.id) ? params.id[0] : params.id) : '';
   
-  const [partida, setPartida] = useState<IPartida | null>(null);
+  const [game, setGame] = useState<IGame | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
 
-  usePartidaSocket({
+  useGameSocket({
     id: gameId,
-    pid: "observer",
-    setPartida,
+    playerId: 'observer',
+    setGame,
     setPlayer: () => {},
   });
 
-  // Fetch inicial da partida
+  // Initial fetch of the game
   useEffect(() => {
     if (!gameId) return;
-    console.log('[DEBUG] Iniciando fetch inicial da partida', gameId);
+    console.log('[DEBUG] Starting initial fetch of game', gameId);
     fetch(`/api/partida?gameId=${gameId}`)
       .then(res => {
-        console.log('[DEBUG] Resposta do fetch inicial', res);
+        console.log('[DEBUG] Initial fetch response', res);
         if (!res.ok) throw new Error();
         return res.json();
       })
       .then(data => {
-        console.log('[DEBUG] Dados recebidos do fetch inicial', data);
-        setPartida(data);
+        console.log('[DEBUG] Data received from initial fetch', data);
+        setGame(data);
         setError(null);
       })
       .catch((err) => {
-        console.error('[DEBUG] Erro ao carregar partida', err);
-        setError("Erro ao carregar partida");
+        console.error('[DEBUG] Error loading game', err);
+        setError('Error loading game');
       });
   }, [gameId]);
 
-  // Debug para eventos do WebSocket
+  // Debug for WebSocket events
   useEffect(() => {
-    if (!partida) return;
-    console.log('[DEBUG] Estado da partida atualizado via WebSocket ou fetch', partida);
-  }, [partida]);
+    if (!game) return;
+    console.log('[DEBUG] Game state updated via WebSocket or fetch', game);
+  }, [game]);
 
   // Early return if no gameId
   if (!gameId) {
@@ -72,23 +73,21 @@ export default function GamePage() {
   }
 
   const handleRestart = async () => {
-    if (!partida) return;
+    if (!game) return;
     setRestarting(true);
     try {
       // Embaralhar e redistribuir cartas
       const shuffled = shuffleDeck(Array.from({ length: 98 }, (_, i) => i + 2));
-      const nomes = partida.jogadores.map(j => j.name || `Jogador`);
-      const { players, deck } = dealCards(shuffled, nomes, 6);
-      const ordemJogadores = partida.jogadores.map(j => j.id);
-      const newPartida = {
-        ...partida,
+      const { players, deck } = dealCards(shuffled, game.players.map(j => j.name), 6);
+      const ordemJogadores = game.players.map(j => j.id);
+      const newGame = {
+        ...game,
         timestamp: Date.now(),
-        jogadores: players.map((p, idx) => ({
-          ...partida.jogadores[idx],
-          name: p.name,
-          cartas: p.cards,
+        players: game.players.map((j, idx) => ({
+          ...j,
+          cards: players[idx].cards,
         })),
-        pilhas: {
+        piles: {
           asc1: [1],
           asc2: [1],
           desc1: [100],
@@ -96,18 +95,18 @@ export default function GamePage() {
         },
         baralho: deck,
         ordemJogadores,
-        jogadorAtual: ordemJogadores[0],
+        currentPlayer: ordemJogadores[0],
         status: "em_andamento",
       };
       const res = await fetch("/api/partida", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gameId, partida: newPartida }),
+        body: JSON.stringify({ gameId, game: newGame }),
       });
       if (!res.ok) throw new Error("Erro ao reiniciar partida");
       // Buscar o estado atualizado imediatamente após reiniciar
       const data = await fetch(`/api/partida?gameId=${gameId}`).then(r => r.json());
-      setPartida(data);
+      setGame(data);
     } catch (err) {
       setError("Erro ao reiniciar partida");
       console.error(err);
@@ -149,9 +148,9 @@ export default function GamePage() {
   };
 
   const copyAllLinks = () => {
-    if (!partida) return;
+    if (!game) return;
     
-    const allLinks = partida.jogadores.map((player, index) => 
+    const allLinks = game.players.map((player, index) => 
       `Jogador ${index + 1}: ${window.location.origin}/partida/${gameId}/player/${player.id}`
     ).join('\n');
     
@@ -159,9 +158,9 @@ export default function GamePage() {
   };
 
   const getStatusDisplay = () => {
-    if (!partida) return "";
+    if (!game) return "";
     
-    switch (partida.status) {
+    switch (game.status) {
       case "esperando_jogadores":
         return "⏳ Aguardando Jogadores";
       case "em_andamento":
@@ -171,20 +170,20 @@ export default function GamePage() {
       case "defeat":
         return "💀 Derrota";
       default:
-        return partida.status;
+        return game.status;
     }
   };
 
   const getCurrentPlayerName = () => {
-    if (!partida) return "";
-    const currentPlayer = partida.jogadores.find(p => p.id === partida.jogadorAtual);
+    if (!game) return "";
+    const currentPlayer = game.players.find(p => p.id === game.currentPlayer);
     return currentPlayer?.name || "Jogador sem nome";
   };
 
   const getTimeRemaining = () => {
-    if (!partida) return "";
+    if (!game) return "";
     const now = Date.now();
-    const elapsed = now - (partida.timestamp ?? 0);
+    const elapsed = now - (game.timestamp ?? 0);
     const remaining = (24 * 60 * 60 * 1000) - elapsed; // 24 hours - elapsed
     
     if (remaining <= 0) return "Expirado";
@@ -212,7 +211,7 @@ export default function GamePage() {
     );
   }
 
-  if (!partida) {
+  if (!game) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
         <div className="bg-yellow-100 border border-yellow-400 rounded-lg p-6 max-w-md text-center">
@@ -229,7 +228,7 @@ export default function GamePage() {
     );
   }
 
-  const playerLinks = partida.jogadores.map((player, index) => ({
+  const playerLinks = game.players.map((player, index) => ({
     id: player.id,
     name: player.name || `Jogador ${index + 1}`,
     url: `${window.location.origin}/partida/${gameId}/player/${player.id}`,
@@ -248,7 +247,7 @@ export default function GamePage() {
                 <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
                   {getStatusDisplay()}
                 </span>
-                {partida.status === "em_andamento" && (
+                {game.status === "em_andamento" && (
                   <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full">
                     Turno: {getCurrentPlayerName()}
                   </span>
@@ -384,25 +383,20 @@ export default function GamePage() {
             ))}
           </div>
           
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
-            <p className="text-blue-700 text-sm">
-              💡 <strong>Dica:</strong> Compartilhe os links individualmente ou use &quot;Copiar Todos&quot; para enviar de uma vez.
-              Cada jogador deve usar seu link específico para entrar na partida.
-            </p>
-          </div>
+          <PlayerLinksTip />
         </div>
 
         {/* Game Board */}
         <div className="bg-white rounded-lg shadow-lg p-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4">Tabuleiro do Jogo</h2>
           <GameBoard 
-            piles={partida.pilhas}
+            piles={game.piles}
             player={{ id: "observer", name: "Observador", cards: [] }} // Observer mode - no player interaction
             onPlay={() => {}} // No interaction for observers
             isCurrentPlayer={false} // Observers can't play
           />
           
-          {partida.status === "esperando_jogadores" && (
+          {game.status === "esperando_jogadores" && (
             <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-center">
               <p className="text-blue-700 font-medium mb-2">
                 Aguardando jogadores se conectarem...
