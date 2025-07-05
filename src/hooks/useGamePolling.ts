@@ -29,7 +29,10 @@ export function useGamePolling({ id, playerId, setGame, setPlayer }: UseGamePoll
         const response = await fetch(`/api/partida?gameId=${id}`);
         if (!response.ok) return;
         let game: IGame = await response.json();
-        if (game.status !== 'defeat' && isGameDefeat(game)) {
+        if (
+          (game.status === 'in_progress' || game.status === 'em_andamento') &&
+          isGameDefeat(game)
+        ) {
           game = { ...game, status: 'defeat' };
         }
         setGame(game);

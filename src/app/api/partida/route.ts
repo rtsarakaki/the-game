@@ -93,6 +93,10 @@ const checkAndAutoStart = async (gameId: string, game: IGame): Promise<IGame> =>
     await notifyClients('game:started', updatedGame);
     return updatedGame;
   }
+  // Se ainda não tem todos os nomes, mantenha status waiting_players
+  if (!allNamesProvided && game.status !== "waiting_players") {
+    return { ...game, status: "waiting_players" };
+  }
   return game;
 };
 
@@ -199,6 +203,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
     }
     game = await checkAndAutoStart(gameId, game);
+    // Só valida status de fim de jogo se o jogo já começou
+    if (game.status !== 'in_progress') {
+      // Nunca roda checkGameEnd antes do jogo começar
+      return NextResponse.json(mapGameToFrontend(game));
+    }
     // Validate game status before returning
     const currentPlayerIndex = game.players.findIndex((p) => p.id === game.currentPlayer);
     const minCardsPerTurn = game.deck.length === 0 ? 1 : 2;

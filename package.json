@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "export": "next build",
-    "lint": "next lint"
+    "lint": "next lint",
+    "postpush": "npm version patch --no-git-tag-version && node scripts/update-version-env.js && git add package.json .env.local && git commit -m 'chore: bump version [ci skip]' && git push"
   },
   "dependencies": {
     "@types/uuid": "^10.0.0",

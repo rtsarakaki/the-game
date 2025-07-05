@@ -32,7 +32,6 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
   const [playedThisTurn, setPlayedThisTurn] = useState<number[]>([]);
   const [lastDrop, setLastDrop] = useState<string | null>(null);
   const [errorDrop, setErrorDrop] = useState<string | null>(null);
-  const [turnPlays, setTurnPlays] = useState(0);
 
   const {
     game,
@@ -53,11 +52,11 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
   useGamePolling({ id: gameId, playerId, setGame, setPlayer });
   useAudioFeedback(game?.status);
 
-  // Reset turnPlays to zero at the start of the player's turn
+  // Reset turnPlays e playedThisTurn ao receber um novo turno
   const prevPlayerRef = useRef<string | null>(null);
   useEffect(() => {
     if (isMyTurn && game?.currentPlayer !== prevPlayerRef.current) {
-      setTurnPlays(0);
+      setPlayedThisTurn([]);
       prevPlayerRef.current = game?.currentPlayer || null;
     }
   }, [isMyTurn, game?.currentPlayer]);
@@ -91,11 +90,14 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
 
   const gameStats = useGameStats(game);
 
-  const minPlays = game && game.deck.length === 0 ? 1 : 2;
   const canStillPlay = player && game ? isMovePossible(player, game.piles as PilesType) : false;
-  const canEndTurn = isMyTurn && (!canStillPlay || turnPlays >= minPlays);
 
   const currentPlayerName = game?.players.find(p => p.id === game.currentPlayer)?.name;
+
+  // Wrapper para passar a vez, sem reset local imediato
+  const handleEndTurnWithReset = async () => {
+    await handleEndTurn();
+  };
 
   if (gameLoading || playerLoading) {
     return <LoadingScreen message="Loading game..." />;
@@ -150,7 +152,6 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
             handlePlayCard={async (card, pileKey) => {
               await handlePlayCard(card, pileKey);
               setPlayedThisTurn((prev) => [...prev, card]);
-              setTurnPlays((prev) => prev + 1);
               setDraggedCard(null);
               setDropTarget(null);
               setLastDrop(pileKey);
@@ -166,11 +167,9 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
             <div className="flex flex-col gap-1">
               <TurnActions
                 isMyTurn={isMyTurn}
-                canEndTurn={canEndTurn}
-                onEndTurn={handleEndTurn}
+                onEndTurn={handleEndTurnWithReset}
                 endTurnError={canStillPlay ? endTurnErrorFromHook : null}
               />
-              <span className="text-xs text-gray-500 mb-1">Plays this turn: <span className="font-semibold">{turnPlays}</span></span>
             </div>
             <GameStatsPanel
               cardsLeft={gameStats.cardsLeft}
@@ -183,13 +182,15 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
       <div className="block lg:hidden w-full max-w-4xl mt-8">
         <GameRules variant="mobile" />
       </div>
-      <GameEndOverlay
-        status={game.status}
-        stats={{
-          totalCardsPlayed: gameStats.totalCardsPlayed,
-          rounds: gameStats.rounds,
-        }}
-      />
+      {['victory', 'defeat', 'vitoria', 'derrota'].includes(game.status) && (
+        <GameEndOverlay
+          status={game.status}
+          stats={{
+            totalCardsPlayed: gameStats.totalCardsPlayed,
+            rounds: gameStats.rounds,
+          }}
+        />
+      )}
       <AppFooter />
     </main>
   );

@@ -10,6 +10,7 @@ interface GameEndOverlayProps {
 
 export default function GameEndOverlay({ status, stats }: GameEndOverlayProps) {
   if (!["victory", "defeat", "vitoria", "derrota"].includes(status)) return null;
+  if (["waiting_players", "esperando_jogadores"].includes(status)) return null;
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50">
       <div className="max-w-md w-full">
