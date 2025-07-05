@@ -24,80 +24,91 @@ interface PilesProps {
   errorDrop: string | null;
 }
 
-const Piles: React.FC<PilesProps> = ({ pilhas, isMyTurn, isTouchDevice, draggedCard, selectedCard, setSelectedCard, setErrorDrop, handlePlayCard, canDropCard, dropTarget, setDropTarget, lastDrop, errorDrop }) => (
-  <div className="grid grid-cols-2 gap-4">
-    {Object.entries(pilhas).map(([key, pile]) => {
-      const type = key.startsWith("asc") ? "asc" : "desc";
-      return (
-        <div
-          key={key}
-          className={`flex flex-col items-center ${dropTarget === key ? "border-blue-500 border-2" : "border-transparent"} ${lastDrop === key ? "ring-4 ring-green-400 scale-105 animate-pulse" : ""} ${errorDrop === key ? "border-red-500 ring-2 ring-red-400" : ""}`}
-          onDragOver={e => {
-            if (isTouchDevice) return;
-            e.preventDefault();
-            if (isMyTurn) setDropTarget(key);
-            if (isMyTurn && draggedCard !== null && !canDropCard(draggedCard, key as keyof PilesType)) {
-              setErrorDrop(key);
-            } else {
+const Piles: React.FC<PilesProps> = ({ pilhas, isMyTurn, isTouchDevice, draggedCard, selectedCard, setSelectedCard, setErrorDrop, handlePlayCard, canDropCard, dropTarget, setDropTarget, lastDrop, errorDrop }) => {
+  const [highlightedPile, setHighlightedPile] = React.useState<string | null>(null);
+
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      {Object.entries(pilhas).map(([key, pile]) => {
+        const type = key.startsWith("asc") ? "asc" : "desc";
+        const isHighlighted = highlightedPile === key;
+        return (
+          <div
+            key={key}
+            className={`flex flex-col items-center ${dropTarget === key ? "border-blue-500 border-2" : "border-transparent"} ${lastDrop === key ? "ring-4 ring-green-400 scale-105 animate-pulse" : ""} ${errorDrop === key ? "border-red-500 ring-2 ring-red-400" : ""} ${isHighlighted ? "border-4 border-blue-400" : ""}`}
+            onDragOver={e => {
+              if (isTouchDevice) return;
+              e.preventDefault();
+              if (isMyTurn) setDropTarget(key);
+              if (isMyTurn && draggedCard !== null && !canDropCard(draggedCard, key as keyof PilesType)) {
+                setErrorDrop(key);
+              } else {
+                setErrorDrop(null);
+              }
+            }}
+            onDragLeave={() => {
+              if (isTouchDevice) return;
+              setDropTarget(null);
               setErrorDrop(null);
-            }
-          }}
-          onDragLeave={() => {
-            if (isTouchDevice) return;
-            setDropTarget(null);
-            setErrorDrop(null);
-          }}
-          onDrop={e => {
-            if (isTouchDevice) return;
-            e.preventDefault();
-            if (isMyTurn && draggedCard !== null) {
-              if (!canDropCard(draggedCard, key as keyof PilesType)) {
-                setErrorDrop(key);
-                setTimeout(() => setErrorDrop(null), 500);
-                return;
-              }
-              handlePlayCard(draggedCard, key as keyof PilesType);
-            }
-            setDropTarget(null);
-          }}
-          onClick={() => {
-            if (!isMyTurn || !isTouchDevice) return;
-            if (selectedCard !== null) {
-              if (!canDropCard(selectedCard, key as keyof PilesType)) {
-                setErrorDrop(key);
-                setTimeout(() => setErrorDrop(null), 500);
-                return;
-              }
-              handlePlayCard(selectedCard, key as keyof PilesType);
-              setSelectedCard(null);
-            }
-          }}
-        >
-          <span className="text-xs text-gray-500 mb-1 flex items-center gap-1">
-            {key.toUpperCase()} <span>{type === "asc" ? "⬆️" : "⬇️"}</span>
-          </span>
-          <Card
-            value={pile[pile.length - 1]}
-            selected={false}
-            onClick={() => {
-              if (!isMyTurn || !isTouchDevice) return;
-              if (selectedCard !== null) {
-                if (!canDropCard(selectedCard, key as keyof PilesType)) {
+            }}
+            onDrop={e => {
+              if (isTouchDevice) return;
+              e.preventDefault();
+              if (isMyTurn && draggedCard !== null) {
+                if (!canDropCard(draggedCard, key as keyof PilesType)) {
                   setErrorDrop(key);
                   setTimeout(() => setErrorDrop(null), 500);
                   return;
                 }
+                handlePlayCard(draggedCard, key as keyof PilesType);
+              }
+              setDropTarget(null);
+            }}
+            onClick={() => {
+              if (!isMyTurn || !isTouchDevice) return;
+              if (selectedCard !== null) {
+                setHighlightedPile(key);
+                if (!canDropCard(selectedCard, key as keyof PilesType)) {
+                  setErrorDrop(key);
+                  setTimeout(() => setErrorDrop(null), 500);
+                  setTimeout(() => setHighlightedPile(null), 500);
+                  return;
+                }
                 handlePlayCard(selectedCard, key as keyof PilesType);
                 setSelectedCard(null);
+                setHighlightedPile(null);
               }
             }}
-            disabled={!isMyTurn || selectedCard === null}
-            variant="pile"
-          />
-        </div>
-      );
-    })}
-  </div>
-);
+          >
+            <span className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+              {key.toUpperCase()} <span>{type === "asc" ? "⬆️" : "⬇️"}</span>
+            </span>
+            <Card
+              value={pile[pile.length - 1]}
+              selected={false}
+              onClick={() => {
+                if (!isMyTurn || !isTouchDevice) return;
+                if (selectedCard !== null) {
+                  setHighlightedPile(key);
+                  if (!canDropCard(selectedCard, key as keyof PilesType)) {
+                    setErrorDrop(key);
+                    setTimeout(() => setErrorDrop(null), 500);
+                    setTimeout(() => setHighlightedPile(null), 500);
+                    return;
+                  }
+                  handlePlayCard(selectedCard, key as keyof PilesType);
+                  setSelectedCard(null);
+                  setHighlightedPile(null);
+                }
+              }}
+              disabled={!isMyTurn || selectedCard === null}
+              variant="pile"
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export default Piles; 
