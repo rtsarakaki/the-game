@@ -1,5 +1,5 @@
 "use client";
-import React, { use, useState, useEffect } from "react";
+import React, { use, useState } from "react";
 import { isValidMove, PileType } from '@/domain/isValidMove';
 import GameEndOverlay from '@/components/GameEndOverlay';
 import GameRules from '@/components/GameRules';
@@ -25,7 +25,6 @@ import SectionCard from '@/components/SectionCard';
 import PlayerNameSection from '@/components/PlayerNameSection';
 import { isMovePossible } from '@/domain/isMovePossible';
 import { useResetOnTurnChange } from '@/hooks/useResetOnTurnChange';
-import { checkGameCurrentStatus } from '@/domain/checkGameCurrentStatus';
 
 export default function PlayerHandPage({ params }: { params: Promise<{ id: string; pid: string }> }) {
   const { id: gameId, pid: playerId } = use(params);
@@ -35,7 +34,6 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
   const [cardsPlayedByCurrentPlayerThisTurn, setCardsPlayedByCurrentPlayerThisTurn] = useState<number[]>([]);
   const [lastPileKeyCardWasDroppedOn, setLastPileKeyCardWasDroppedOn] = useState<string | null>(null);
   const [pileKeyWithDropError, setPileKeyWithDropError] = useState<string | null>(null);
-  const [localGameOverStatus, setLocalGameOverStatus] = useState<'defeat' | null>(null);
 
   const {
     game: gameRaw,
@@ -81,37 +79,6 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
     setPlayedThisTurn: setCardsPlayedByCurrentPlayerThisTurn,
   });
 
-  useEffect(() => {
-    if (
-      gameRaw &&
-      playerRaw &&
-      gameRaw.status === 'in_progress' &&
-      typeof gameRaw.currentPlayer === 'string' &&
-      Array.isArray(gameRaw.players)
-    ) {
-      const currentPlayerIndex = gameRaw.players.findIndex(p => p.id === gameRaw.currentPlayer);
-      // Definir mínimo de cartas por turno conforme regra do jogo
-      const minCardsPerTurn = gameRaw.deck.length > 0 ? 2 : 1;
-      const currentTurnPlays = cardsPlayedByCurrentPlayerThisTurn.length;
-      // Adaptar isMovePossible para assinatura esperada
-      const isMovePossibleForCheck = (player: IPlayer, piles: PilesType) => isMovePossible(player, piles, true);
-      const status = checkGameCurrentStatus(
-        gameRaw.deck,
-        gameRaw.players,
-        gameRaw.piles,
-        isMovePossibleForCheck,
-        currentPlayerIndex,
-        minCardsPerTurn,
-        currentTurnPlays
-      );
-      if (status === 'defeat') {
-        setLocalGameOverStatus('defeat');
-      } else {
-        setLocalGameOverStatus(null);
-      }
-    }
-  }, [gameRaw, playerRaw, cardsPlayedByCurrentPlayerThisTurn]);
-
   if (gameLoading) {
     return <LoadingScreen message="Carregando dados do jogo..." />;
   }
@@ -144,7 +111,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
     : undefined;
 
   const GAME_OVER_STATUSES = ["victory", "defeat"];
-  const isGameOver = GAME_OVER_STATUSES.includes(gameRaw?.status) || localGameOverStatus === 'defeat';
+  const isGameOver = GAME_OVER_STATUSES.includes(gameRaw?.status);
 
   // --- Handlers ---
   const handleEndTurnWithReset = async () => {
@@ -297,7 +264,7 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
       </div>
       {isGameOver && (
         <GameEndOverlay
-          status={localGameOverStatus ?? game?.status}
+          status={game?.status}
           stats={{
             totalCardsPlayed: gameStats.totalCardsPlayed,
             rounds: gameStats.rounds,
