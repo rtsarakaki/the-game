@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import React from "react";
 import { useGameSocket } from '@/hooks/useGameSocket';
@@ -20,6 +20,7 @@ export default function GamePage() {
   const router = useRouter();
   const gameId = params ? (Array.isArray(params.id) ? params.id[0] : params.id) : '';
   const [restarting, setRestarting] = useState(false);
+  const [notFoundDelay, setNotFoundDelay] = useState(false);
 
   const {
     game,
@@ -45,6 +46,13 @@ export default function GamePage() {
     shareViaWhatsApp,
     copyAllLinks,
   } = useShareActions();
+
+  useEffect(() => {
+    if (!game && !notFoundDelay) {
+      const timer = setTimeout(() => setNotFoundDelay(true), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [game, notFoundDelay]);
 
   // Early return if no gameId
   if (!gameId) {
@@ -91,6 +99,9 @@ export default function GamePage() {
   }
 
   if (!game) {
+    if (!notFoundDelay) {
+      return <LoadingScreen message="Carregando dados do jogo..." />;
+    }
     return <NotFoundScreen onAction={navigateToHomePage} />;
   }
 
