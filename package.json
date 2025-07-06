@@ -1,6 +1,6 @@
 {
   "name": "the-game",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "scripts": {
     "dev": "NEXT_PRIVATE_TURBOPACK=0 next dev",
