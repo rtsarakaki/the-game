@@ -8,6 +8,7 @@
     "start": "next start",
     "export": "next build",
     "lint": "next lint",
+    "prebuild": "node scripts/update-footer-version.js",
     "postpush": "npm version patch --no-git-tag-version && node scripts/update-version-env.js && git add package.json .env.local && git commit -m 'chore: bump version [ci skip]' && git push"
   },
   "dependencies": {

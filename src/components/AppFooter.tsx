@@ -1,7 +1,6 @@
 import React from 'react';
-// @ts-expect-error: Importing package.json for version display in Next.js/TypeScript
-import pkg from '../../package.json';
-const version = pkg.version;
+// ATENÇÃO: Sempre que mudar a versão no package.json, atualize o valor abaixo manualmente!
+const version = '0.1.4'; // Atualize este valor manualmente conforme a versão do package.json
 
 const AppFooter: React.FC = () => (
   <footer className="mt-8 text-xs text-gray-400 text-center w-full" aria-label="Rodapé">
