@@ -268,10 +268,14 @@ export async function PUT(req: NextRequest) {
       if (updatedGame.status === 'in_progress') {
         updatedGame = replenishCardsForPreviousPlayer(updatedGame, game.currentPlayer);
       }
-    } else {
-      updatedGame.currentTurnPlays = (updatedGame.currentTurnPlays || 0) + 1;
-      const currentPlayerIndex2 = updatedGame.players.findIndex((p) => p.id === updatedGame.currentPlayer);
-      updatedGame = checkGameStatus(updatedGame, currentPlayerIndex2, updatedGame.deck.length === 0 ? 1 : 2);
+    }
+    // Sempre valida o status de fim de jogo após qualquer jogada
+    const currentPlayerIndex2 = updatedGame.players.findIndex((p) => p.id === updatedGame.currentPlayer);
+    const minCardsPerTurn2 = updatedGame.deck.length === 0 ? 1 : 2;
+    const checkedGame = checkGameStatus(updatedGame, currentPlayerIndex2, minCardsPerTurn2);
+    if (checkedGame.status !== updatedGame.status) {
+      await saveGame(gameId, checkedGame);
+      updatedGame = checkedGame;
     }
     // Log after saving
     const after = updatedGame.players.map(player => ({ id: player.id, cards: player.cards }));
