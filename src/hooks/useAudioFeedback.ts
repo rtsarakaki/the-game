@@ -1,18 +1,26 @@
 import { useEffect, useRef } from "react";
 import { useUserInteraction } from '@/context/UserInteractionContext';
 
+function canPlayDefeatSoundNow(status: string | undefined, canPlayAudioByUserPolicy: boolean, defeatSoundPlayed: boolean) {
+  return (
+    (status === 'defeat' || status === 'derrota') &&
+    !defeatSoundPlayed &&
+    canPlayAudioByUserPolicy
+  );
+}
+
 export function useAudioFeedback(status: string | undefined) {
-  const defeatPlayedRef = useRef(false);
-  const hasUserInteracted = useUserInteraction();
+  const defeatSoundPlayedRef = useRef(false);
+  const canPlayAudioByUserPolicy = useUserInteraction();
   useEffect(() => {
-    if (!status) return;
-    if ((status === 'defeat' || status === 'derrota') && !defeatPlayedRef.current && hasUserInteracted) {
+    const shouldPlayDefeat = canPlayDefeatSoundNow(status, canPlayAudioByUserPolicy, defeatSoundPlayedRef.current);
+    if (shouldPlayDefeat) {
       const audio = new Audio('/sounds/lose.mp3');
       audio.play();
-      defeatPlayedRef.current = true;
+      defeatSoundPlayedRef.current = true;
     }
     if (status !== 'defeat' && status !== 'derrota') {
-      defeatPlayedRef.current = false;
+      defeatSoundPlayedRef.current = false;
     }
-  }, [status, hasUserInteracted]);
+  }, [status, canPlayAudioByUserPolicy]);
 } 

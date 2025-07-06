@@ -48,6 +48,10 @@ function buildUpdatedGameState(latestGame: IGame, latestPlayer: IPlayer, card: n
 }
 
 async function sendGameStateToBackend(id: string, updated: IGame) {
+  if (updated.status === 'defeat' || updated.status === 'victory' || updated.status === 'in_progress') {
+    debugger;
+    console.log('[FRONT][sendGameStateToBackend] PUT /api/partida', { gameId: id, status: updated.status });
+  }
   await fetch("/api/partida", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

@@ -12,6 +12,10 @@ export async function fetchGame(gameId: string): Promise<IGame> {
 }
 
 export async function updateGame(gameId: string, game: IGame): Promise<void> {
+  if (game.status === 'defeat' || game.status === 'victory' || game.status === 'in_progress') {
+    debugger;
+    console.log('[FRONT][updateGame] PUT /api/partida', { gameId, status: game.status });
+  }
   const response = await fetch('/api/partida', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -80,6 +84,10 @@ export async function restartGame(game: IGame): Promise<IGame> {
     currentPlayer: playerOrder[0],
     status: "in_progress",
   };
+  if (restartedGame.status === 'defeat' || restartedGame.status === 'victory' || restartedGame.status === 'in_progress') {
+    debugger;
+    console.log('[FRONT][restartGame] PUT /api/partida', { gameId: game.id, status: restartedGame.status });
+  }
   const res = await fetch("/api/partida", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

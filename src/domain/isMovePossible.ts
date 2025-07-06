@@ -7,7 +7,12 @@ import { isValidMove, PileType } from './isValidMove';
  * @param piles The piles
  * @returns true if at least one move is possible
  */
-export const isMovePossible = (player: IPlayer, piles: Piles): boolean => {
+export const isMovePossible = (player: IPlayer, piles: Piles, isGameInProgress: boolean): boolean => {
+  
+  if (!isGameInProgress) {
+    return false;
+  }
+  
   const pileTypes: [keyof Piles, PileType][] = [
     ['asc1', 'asc'],
     ['asc2', 'asc'],

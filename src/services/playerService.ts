@@ -7,6 +7,10 @@ export async function updatePlayerName(gameId: string, playerId: string, name: s
       player.id === playerId ? { ...player, name } : player
     ),
   };
+  if (updatedGame.status === 'defeat' || updatedGame.status === 'victory' || updatedGame.status === 'in_progress') {
+    debugger;
+    console.log('[FRONT][updatePlayerName] PUT /api/partida', { gameId, status: updatedGame.status });
+  }
   const res = await fetch("/api/partida", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

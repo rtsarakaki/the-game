@@ -1,5 +1,5 @@
 "use client";
-import React, { use, useState, useEffect, useRef } from "react";
+import React, { use, useState, useEffect } from "react";
 import { isValidMove, PileType } from '@/domain/isValidMove';
 import GameEndOverlay from '@/components/GameEndOverlay';
 import GameRules from '@/components/GameRules';
@@ -17,111 +17,231 @@ import { useGameStats } from '@/hooks/useGameStats';
 import PlayerHandSection from '@/components/PlayerHandSection';
 import PilesSection from '@/components/PilesSection';
 import type { PilesType } from '@/components/Piles';
+import type { IGame, IPlayer } from '@/domain/types';
 import { usePlayCard } from '@/hooks/usePlayCard';
 import { useEndTurn } from '@/hooks/useEndTurn';
 import AppFooter from '@/components/AppFooter';
 import SectionCard from '@/components/SectionCard';
 import PlayerNameSection from '@/components/PlayerNameSection';
 import { isMovePossible } from '@/domain/isMovePossible';
+import { useResetOnTurnChange } from '@/hooks/useResetOnTurnChange';
+import { checkGameCurrentStatus } from '@/domain/checkGameCurrentStatus';
 
 export default function PlayerHandPage({ params }: { params: Promise<{ id: string; pid: string }> }) {
   const { id: gameId, pid: playerId } = use(params);
-  const [draggedCard, setDraggedCard] = useState<number | null>(null);
-  const [selectedCard, setSelectedCard] = useState<number | null>(null);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const [playedThisTurn, setPlayedThisTurn] = useState<number[]>([]);
-  const [lastDrop, setLastDrop] = useState<string | null>(null);
-  const [errorDrop, setErrorDrop] = useState<string | null>(null);
+  const [cardValueBeingDragged, setCardValueBeingDragged] = useState<number | null>(null);
+  const [cardValueSelectedByCurrentPlayer, setCardValueSelectedByCurrentPlayer] = useState<number | null>(null);
+  const [pileKeyTargetedForDrop, setPileKeyTargetedForDrop] = useState<string | null>(null);
+  const [cardsPlayedByCurrentPlayerThisTurn, setCardsPlayedByCurrentPlayerThisTurn] = useState<number[]>([]);
+  const [lastPileKeyCardWasDroppedOn, setLastPileKeyCardWasDroppedOn] = useState<string | null>(null);
+  const [pileKeyWithDropError, setPileKeyWithDropError] = useState<string | null>(null);
+  const [localGameOverStatus, setLocalGameOverStatus] = useState<'defeat' | null>(null);
 
   const {
-    game,
+    game: gameRaw,
     setGame,
     error: gameError,
     loading: gameLoading,
   } = useGameLoader(gameId);
 
   const {
-    player,
+    player: playerRaw,
     setPlayer,
     error: playerError,
     loading: playerLoading,
-  } = usePlayerLoader(game, playerId);
+  } = usePlayerLoader(gameRaw, playerId);
 
-  const isMyTurn = (game?.status === "em_andamento" || game?.status === "in_progress") && game?.currentPlayer === playerId;
+  // Chame todos os hooks custom antes de qualquer return condicional
   const isTouchDevice = useIsTouchDevice();
   useGamePolling({ id: gameId, playerId, setGame, setPlayer });
-  useAudioFeedback(game?.status);
-
-  // Reset turnPlays e playedThisTurn ao receber um novo turno
-  const prevPlayerRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (isMyTurn && game?.currentPlayer !== prevPlayerRef.current) {
-      setPlayedThisTurn([]);
-      prevPlayerRef.current = game?.currentPlayer || null;
-    }
-  }, [isMyTurn, game?.currentPlayer]);
-
+  useAudioFeedback(gameRaw?.status);
+  useResetOnTurnChange(
+    gameRaw?.currentPlayer === playerId && gameRaw?.status === "in_progress",
+    gameRaw?.currentPlayer || null,
+    () => setCardsPlayedByCurrentPlayerThisTurn([])
+  );
+  const gameStats = useGameStats(gameRaw);
   const { handlePlayCard } = usePlayCard({
-    isMyTurn,
-    game,
-    player,
+    isMyTurn: gameRaw?.currentPlayer === playerId && gameRaw?.status === "in_progress",
+    game: gameRaw,
+    player: playerRaw,
     playerId,
     isValidMove,
     setGame,
     setPlayer,
   });
-
   const { handleEndTurn, endTurnError: endTurnErrorFromHook } = useEndTurn({
-    isMyTurn,
-    game,
-    player,
+    isMyTurn: gameRaw?.currentPlayer === playerId && gameRaw?.status === "in_progress",
+    game: gameRaw,
+    player: playerRaw,
     playerId,
-    playedThisTurn,
+    playedThisTurn: cardsPlayedByCurrentPlayerThisTurn,
     setGame,
     setPlayer,
-    setPlayedThisTurn,
+    setPlayedThisTurn: setCardsPlayedByCurrentPlayerThisTurn,
   });
 
-  const canDropCard = (card: number, pileKey: keyof PilesType) => {
+  useEffect(() => {
+    if (
+      gameRaw &&
+      playerRaw &&
+      gameRaw.status === 'in_progress' &&
+      typeof gameRaw.currentPlayer === 'string' &&
+      Array.isArray(gameRaw.players)
+    ) {
+      const currentPlayerIndex = gameRaw.players.findIndex(p => p.id === gameRaw.currentPlayer);
+      // Definir mínimo de cartas por turno conforme regra do jogo
+      const minCardsPerTurn = gameRaw.deck.length > 0 ? 2 : 1;
+      const currentTurnPlays = cardsPlayedByCurrentPlayerThisTurn.length;
+      // Adaptar isMovePossible para assinatura esperada
+      const isMovePossibleForCheck = (player: IPlayer, piles: PilesType) => isMovePossible(player, piles, true);
+      const status = checkGameCurrentStatus(
+        gameRaw.deck,
+        gameRaw.players,
+        gameRaw.piles,
+        isMovePossibleForCheck,
+        currentPlayerIndex,
+        minCardsPerTurn,
+        currentTurnPlays
+      );
+      if (status === 'defeat') {
+        setLocalGameOverStatus('defeat');
+      } else {
+        setLocalGameOverStatus(null);
+      }
+    }
+  }, [gameRaw, playerRaw, cardsPlayedByCurrentPlayerThisTurn]);
+
+  if (gameLoading) {
+    return <LoadingScreen message="Carregando dados do jogo..." />;
+  }
+  if (!gameRaw) {
+    return <ErrorScreen title="Erro" message="Dados da partida não carregados (gameRaw nulo)." actionLabel="Voltar para o início" onAction={() => window.location.assign('/')} />;
+  }
+  if (playerLoading) {
+    return <LoadingScreen message="Carregando dados do jogador..." />;
+  }
+  const isGameInProgress = gameRaw!.status === "in_progress";
+  if (playerRaw === null && isGameInProgress) {
+    return <ErrorScreen title="Erro" message="Jogador não encontrado na partida (playerRaw nulo)." actionLabel="Voltar para o início" onAction={() => window.location.assign('/')} />;
+  }
+
+  const iAmTheCurrentPlayer = gameRaw!.currentPlayer === playerId;
+  const isMyTurn = iAmTheCurrentPlayer && isGameInProgress ;
+
+  const CARD_DROP_FEEDBACK_TIMEOUT_MS = 500;
+
+  const canCurrentCardBeDroppedOnPile = (card: number, pileKey: keyof PilesType) => {
     const pileType: PileType = pileKey.startsWith('asc') ? 'asc' : 'desc';
-    const topCard = (game!.piles as PilesType)[pileKey][(game!.piles as PilesType)[pileKey].length - 1];
+    const topCard = (gameRaw!.piles as PilesType)[pileKey][(gameRaw!.piles as PilesType)[pileKey].length - 1];
     return isValidMove(pileType, topCard, card);
   };
 
-  const gameStats = useGameStats(game);
+  const currentPlayerHasPossibleMoves = isMovePossible(playerRaw!, gameRaw!.piles as PilesType, isGameInProgress);
 
-  const canStillPlay = player && game ? isMovePossible(player, game.piles as PilesType) : false;
+  const currentPlayerName = Array.isArray(gameRaw.players)
+    ? gameRaw.players.find(p => p.id === gameRaw.currentPlayer)?.name
+    : undefined;
 
-  const currentPlayerName = game?.players.find(p => p.id === game.currentPlayer)?.name;
+  const GAME_OVER_STATUSES = ["victory", "defeat"];
+  const isGameOver = GAME_OVER_STATUSES.includes(gameRaw?.status) || localGameOverStatus === 'defeat';
 
-  // Wrapper para passar a vez, sem reset local imediato
+  // --- Handlers ---
   const handleEndTurnWithReset = async () => {
     await handleEndTurn();
   };
 
-  if (gameLoading || playerLoading) {
-    return <LoadingScreen message="Loading game..." />;
+  function createHandlePlayCardOnPile({
+    handlePlayCard,
+    setCardsPlayedByCurrentPlayerThisTurn,
+    setCardValueBeingDragged,
+    setPileKeyTargetedForDrop,
+    setLastPileKeyCardWasDroppedOn,
+  }: {
+    handlePlayCard: (card: number, pileKey: keyof PilesType) => Promise<void>;
+    setCardsPlayedByCurrentPlayerThisTurn: React.Dispatch<React.SetStateAction<number[]>>;
+    setCardValueBeingDragged: React.Dispatch<React.SetStateAction<number | null>>;
+    setPileKeyTargetedForDrop: React.Dispatch<React.SetStateAction<string | null>>;
+    setLastPileKeyCardWasDroppedOn: React.Dispatch<React.SetStateAction<string | null>>;
+  }) {
+    return async (card: number, pileKey: keyof PilesType) => {
+      await handlePlayCard(card, pileKey);
+      setCardsPlayedByCurrentPlayerThisTurn((prev) => [...prev, card]);
+      setCardValueBeingDragged(null);
+      setPileKeyTargetedForDrop(null);
+      setLastPileKeyCardWasDroppedOn(pileKey);
+      setTimeout(() => setLastPileKeyCardWasDroppedOn(null), CARD_DROP_FEEDBACK_TIMEOUT_MS);
+    };
   }
-  if (gameError) {
-    return <ErrorScreen title="Error" message={gameError} actionLabel="Back to Home" onAction={() => window.location.assign('/')} />;
+
+  const handlePlayCardOnPile = createHandlePlayCardOnPile({
+    handlePlayCard,
+    setCardsPlayedByCurrentPlayerThisTurn,
+    setCardValueBeingDragged,
+    setPileKeyTargetedForDrop,
+    setLastPileKeyCardWasDroppedOn,
+  });
+
+  function getPlayerPageGuardElement({
+    gameLoading,
+    playerLoading,
+    gameError,
+    playerError,
+    game,
+    player,
+    setGame,
+    setPlayer
+  }: {
+    gameLoading: boolean;
+    playerLoading: boolean;
+    gameError: string | null;
+    playerError: string | null;
+    game: IGame | null;
+    player: IPlayer | null;
+    setGame: (game: IGame) => void;
+    setPlayer: (player: IPlayer | null) => void;
+  }) {
+    if (gameLoading || playerLoading) {
+      return <LoadingScreen message="Loading game..." />;
+    }
+    if (gameError) {
+      return <ErrorScreen title="Error" message={gameError} actionLabel="Back to Home" onAction={() => window.location.assign('/')} />;
+    }
+    if (playerError) {
+      return <NotFoundScreen onAction={() => window.location.assign('/')} />;
+    }
+    if (!game) {
+      return <NotFoundScreen onAction={() => window.location.assign('/')} />;
+    }
+    if (!player) {
+      return <NotFoundScreen onAction={() => window.location.assign('/')} />;
+    }
+    if (!player?.name) {
+      return <PlayerNameSection game={game} player={player} setGame={setGame} setPlayer={setPlayer} />;
+    }
+    return null;
   }
-  if (playerError) {
-    return <NotFoundScreen onAction={() => window.location.assign('/')} />;
-  }
-  if (!game) {
-    return <NotFoundScreen onAction={() => window.location.assign('/')} />;
-  }
-  if (!player) {
-    return <NotFoundScreen onAction={() => window.location.assign('/')} />;
-  }
-  if (!player?.name) {
-    return <PlayerNameSection game={game} player={player} setGame={setGame} setPlayer={setPlayer} />;
-  }
+
+  const guardElement = getPlayerPageGuardElement({
+    gameLoading,
+    playerLoading,
+    gameError,
+    playerError,
+    game: gameRaw,
+    player: playerRaw,
+    setGame,
+    setPlayer
+  });
+  if (guardElement) return guardElement;
+
+  // Após o guard, garantimos que game e player não são null
+  const game = gameRaw;
+  const player = playerRaw;
 
   return (
     <main className="flex flex-col items-center min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 p-4">
       <h1 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
-        {player.name || "Player"}
+        {player?.name || "Player"}
         {isMyTurn && (
           <span className="animate-pulse text-base font-bold text-green-400 drop-shadow">Sua Vez de Jogar!</span>
         )}
@@ -132,49 +252,42 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
         </aside>
         <SectionCard className="bg-white/90 w-full lg:w-2/3 flex flex-col gap-6 p-6">
           <PlayerHandSection
-            cards={player.cards || []}
+            cards={player?.cards || []}
             isMyTurn={isMyTurn}
             isTouchDevice={isTouchDevice}
-            draggedCard={draggedCard}
-            selectedCard={selectedCard}
-            setDraggedCard={setDraggedCard}
-            setSelectedCard={setSelectedCard}
-            setErrorDrop={setErrorDrop}
+            draggedCard={cardValueBeingDragged}
+            selectedCard={cardValueSelectedByCurrentPlayer}
+            setDraggedCard={setCardValueBeingDragged}
+            setSelectedCard={setCardValueSelectedByCurrentPlayer}
+            setErrorDrop={setPileKeyWithDropError}
           />
           <PilesSection
             piles={game.piles as PilesType}
             isMyTurn={isMyTurn}
             isTouchDevice={isTouchDevice}
-            draggedCard={draggedCard}
-            selectedCard={selectedCard}
-            setSelectedCard={setSelectedCard}
-            setErrorDrop={setErrorDrop}
-            handlePlayCard={async (card, pileKey) => {
-              await handlePlayCard(card, pileKey);
-              setPlayedThisTurn((prev) => [...prev, card]);
-              setDraggedCard(null);
-              setDropTarget(null);
-              setLastDrop(pileKey);
-              setTimeout(() => setLastDrop(null), 500);
-            }}
-            canDropCard={canDropCard}
-            dropTarget={dropTarget}
-            setDropTarget={setDropTarget}
-            lastDrop={lastDrop}
-            errorDrop={errorDrop}
+            draggedCard={cardValueBeingDragged}
+            selectedCard={cardValueSelectedByCurrentPlayer}
+            setSelectedCard={setCardValueSelectedByCurrentPlayer}
+            setErrorDrop={setPileKeyWithDropError}
+            handlePlayCard={handlePlayCardOnPile}
+            canDropCard={canCurrentCardBeDroppedOnPile}
+            dropTarget={pileKeyTargetedForDrop}
+            setDropTarget={setPileKeyTargetedForDrop}
+            lastDrop={lastPileKeyCardWasDroppedOn}
+            errorDrop={pileKeyWithDropError}
           />
           <div className="flex flex-col-reverse gap-4 lg:flex-col">
             <div className="flex flex-col gap-1">
               <TurnActions
                 isMyTurn={isMyTurn}
                 onEndTurn={handleEndTurnWithReset}
-                endTurnError={canStillPlay ? endTurnErrorFromHook : null}
+                endTurnError={currentPlayerHasPossibleMoves ? endTurnErrorFromHook : null}
               />
             </div>
             <GameStatsPanel
               cardsLeft={gameStats.cardsLeft}
               currentPlayerName={currentPlayerName}
-              gameStatus={game.status}
+              gameStatus={game?.status}
             />
           </div>
         </SectionCard>
@@ -182,9 +295,9 @@ export default function PlayerHandPage({ params }: { params: Promise<{ id: strin
       <div className="block lg:hidden w-full max-w-4xl mt-8">
         <GameRules variant="mobile" />
       </div>
-      {['victory', 'defeat', 'vitoria', 'derrota'].includes(game.status) && (
+      {isGameOver && (
         <GameEndOverlay
-          status={game.status}
+          status={localGameOverStatus ?? game?.status}
           stats={{
             totalCardsPlayed: gameStats.totalCardsPlayed,
             rounds: gameStats.rounds,

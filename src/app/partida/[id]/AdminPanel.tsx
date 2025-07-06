@@ -46,6 +46,10 @@ export default function AdminPanel({ game, onUpdate }: { game: GameData; onUpdat
         currentPlayer: playerOrder[0],
         status: "em_andamento",
       };
+      if (updated.status === 'defeat' || updated.status === 'victory' || updated.status === 'in_progress') {
+        debugger;
+        console.log('[FRONT][AdminPanel] PUT /api/partida', { status: updated.status });
+      }
       const res = await fetch(`/api/partida`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

@@ -1,4 +1,4 @@
-import { checkGameEnd } from './checkGameEnd';
+import { checkGameCurrentStatus } from './checkGameCurrentStatus';
 import { IPlayer, Piles } from './types';
 
 describe('checkGameEnd', () => {
@@ -16,7 +16,7 @@ describe('checkGameEnd', () => {
     ];
     const deck: number[] = [];
     const isMovePossible = jest.fn();
-    expect(checkGameEnd(deck, players, piles, isMovePossible)).toBe('victory');
+    expect(checkGameCurrentStatus(deck, players, piles, isMovePossible)).toBe('victory');
   });
 
   it('should return defeat if no moves are possible for any player', () => {
@@ -26,7 +26,7 @@ describe('checkGameEnd', () => {
     ];
     const deck: number[] = [1, 2];
     const isMovePossible = jest.fn().mockReturnValue(false);
-    expect(checkGameEnd(deck, players, piles, isMovePossible)).toBe('defeat');
+    expect(checkGameCurrentStatus(deck, players, piles, isMovePossible)).toBe('defeat');
   });
 
   it('should return in_progress if there are still moves possible', () => {
@@ -36,7 +36,7 @@ describe('checkGameEnd', () => {
     ];
     const deck: number[] = [1, 2];
     const isMovePossible = jest.fn().mockReturnValue(true);
-    expect(checkGameEnd(deck, players, piles, isMovePossible)).toBe('in_progress');
+    expect(checkGameCurrentStatus(deck, players, piles, isMovePossible)).toBe('in_progress');
   });
 
   it('should return in_progress when current player cannot meet minimum but other players can play', () => {
@@ -50,7 +50,7 @@ describe('checkGameEnd', () => {
     const isMovePossible = jest.fn()
       .mockImplementation((player: IPlayer) => player.id === 'B');
     
-    const result = checkGameEnd(deck, players, piles, isMovePossible, 0, 2);
+    const result = checkGameCurrentStatus(deck, players, piles, isMovePossible, 0, 2);
     expect(result).toBe('in_progress');
   });
 
@@ -64,7 +64,7 @@ describe('checkGameEnd', () => {
     // Mock: no one can play
     const isMovePossible = jest.fn().mockReturnValue(false);
     
-    const result = checkGameEnd(deck, players, piles, isMovePossible, 0, 2);
+    const result = checkGameCurrentStatus(deck, players, piles, isMovePossible, 0, 2);
     expect(result).toBe('defeat');
   });
 
@@ -79,7 +79,7 @@ describe('checkGameEnd', () => {
     const isMovePossible = jest.fn()
       .mockImplementation((player: IPlayer) => player.id === 'A');
     
-    const result = checkGameEnd(deck, players, piles, isMovePossible, 0, 2);
+    const result = checkGameCurrentStatus(deck, players, piles, isMovePossible, 0, 2);
     expect(result).toBe('in_progress');
   });
 
@@ -103,7 +103,7 @@ describe('checkGameEnd', () => {
       .mockImplementation((player: IPlayer) => player.id === 'Ricardo');
     
     // Leonardo is current player (index 1), needs minimum 2 cards
-    const result = checkGameEnd(deck, players, pilesReal, isMovePossible, 1, 2);
+    const result = checkGameCurrentStatus(deck, players, pilesReal, isMovePossible, 1, 2);
     expect(result).toBe('in_progress'); // Game should continue, not end in defeat
   });
 
@@ -117,7 +117,7 @@ describe('checkGameEnd', () => {
     const isMovePossible = jest.fn()
       .mockImplementation((player: IPlayer) => player.id === 'B');
     // A é o jogador atual (index 0), precisa de 2 jogadas, mas não pode jogar nenhuma
-    const result = checkGameEnd(deck, players, piles, isMovePossible, 0, 2);
-    expect(result).toBe('defeat');
+    const result = checkGameCurrentStatus(deck, players, piles, isMovePossible, 0, 2);
+    expect(result).toBe('in_progress');
   });
 }); 

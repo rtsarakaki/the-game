@@ -9,9 +9,11 @@ export function useGameStats(game: IGame | null) {
       rounds: 0,
     };
   }
-  const totalCardsPlayed = 98 - (game.deck.length + game.players.reduce((acc, player) => acc + (player?.cards?.length || 0), 0));
-  const cardsLeft = game.deck.length;
-  const playersLeft = game.players.filter(player => player && player.cards && player.cards.length > 0).length;
+  const deckLength = Array.isArray(game.deck) ? game.deck.length : 0;
+  const playersArray = Array.isArray(game.players) ? game.players : [];
+  const totalCardsPlayed = 98 - (deckLength + playersArray.reduce((acc, player) => acc + (Array.isArray(player?.cards) ? player.cards.length : 0), 0));
+  const cardsLeft = deckLength;
+  const playersLeft = playersArray.filter(player => player && Array.isArray(player.cards) && player.cards.length > 0).length;
   const rounds = typeof game.completedRounds === 'number' ? game.completedRounds : 0;
   return {
     totalCardsPlayed,

@@ -4,9 +4,9 @@ import path from 'path';
 import { shuffleDeck } from '@/domain/shuffleDeck';
 import { dealCards } from '@/domain/dealCards';
 import { isValidMove } from '@/domain/isValidMove';
-import { checkGameEnd } from '@/domain/checkGameEnd';
+import { checkGameCurrentStatus } from '@/domain/checkGameCurrentStatus';
 import { isMovePossible } from '@/domain/isMovePossible';
-import type { IGame, IPlayer } from '@/domain/types';
+import type { IGame, IPlayer, Piles } from '@/domain/types';
 
 const isVercel = !!process.env.VERCEL;
 const GAMES_PATH = isVercel
@@ -171,16 +171,16 @@ function passTurnToNextPlayer(game: IGame): IGame {
 }
 
 function checkGameStatus(game: IGame, currentPlayerIndex?: number, minCardsPerTurn?: number): IGame {
-  const status = checkGameEnd(
+  // Wrapper para compatibilizar assinatura
+  const isMovePossibleForStatus = (player: IPlayer, piles: Piles) => isMovePossible(player, piles, true);
+  const status = checkGameCurrentStatus(
     game.deck,
     game.players,
     game.piles,
-    isMovePossible,
+    isMovePossibleForStatus,
     typeof currentPlayerIndex === 'number' ? currentPlayerIndex : undefined,
     typeof minCardsPerTurn === 'number' ? minCardsPerTurn : undefined,
-    typeof game.currentTurnPlays === 'number' ? game.currentTurnPlays : undefined,
-    game.playerOrder,
-    game.currentPlayer
+    typeof game.currentTurnPlays === 'number' ? game.currentTurnPlays : undefined
   );
   return { ...game, status };
 }
